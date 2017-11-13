@@ -57,26 +57,17 @@ local port = 8099;
     spec+: {
       template+: {
         spec+: {
-          initContainers+: [
-            this.spec.template.spec.containers_.default {
-              name: "npm-install",
-              command: ["npm", "install"],
-            },
-          ],
           volumes_+: {
-            app: kube.GitRepoVolume("https://github.com/OmerTu/GoogleHomeKodi", version),
             config: kube.SecretVolume($.config),
           },
           containers_+: {
             default: kube.Container("server") {
-              image: "node:9.1.0-alpine",
+              image: "anguslees/docker-googlehomekodi",
               workingDir: "/app/GoogleHomeKodi",
-              command: ["node", "server.js"],
               ports_+: {
                 default: {containerPort: port, protocol: "TCP"},
               },
               volumeMounts_+: {
-                app: {mountPath: "/app", readOnly: false},
                 config: {
                   mountPath: "/app/GoogleHomeKodi/kodi-hosts.config.js",
                   subPath: "kodi-hosts.config.js",
