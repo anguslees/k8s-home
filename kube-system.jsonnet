@@ -57,7 +57,7 @@ local kubecfg = import "kubecfg.libsonnet";
           },
           containers_: {
             kube_proxy: kube.Container("kube-proxy") {
-              image: "gcr.io/google_containers/kube-proxy-%s:v1.8.0" % this.arch,
+              image: "gcr.io/google_containers/kube-proxy-%s:v1.8.3" % this.arch,
               command: ["/usr/local/bin/kube-proxy"],
               args_+: {
                 "kubeconfig": "/var/lib/kube-proxy/kubeconfig.conf",
