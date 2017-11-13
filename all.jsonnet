@@ -1,3 +1,9 @@
+// Terrible workaround for
+// https://github.com/kubernetes/kubernetes/issues/53379
+local dummychange = {
+  metadata+: {annotations+: {"dummychange": std.extVar("RANDOM")}},
+};
+
 {
   kube_system: import "kube-system.jsonnet",
 
@@ -12,7 +18,9 @@
   keepalived: import "keepalived.jsonnet",
   nginx_ingress: import "nginx-ingress.jsonnet",
   kube_lego: import "kube-lego.jsonnet",
-  dyndns: import "dyndns.jsonnet",
+  dyndns: (import "dyndns.jsonnet") {
+    secret+: dummychange,
+  },
 
   coreos_pxe_install: import "coreos-pxe-install.jsonnet",
   coreos_updater: import "coreos-updater.jsonnet",
@@ -33,7 +41,11 @@
   //docker_ipfs: import "docker-ipfs.jsonnet",
   //ipfs: import "ipfs.jsonnet",
 
-  ghomekodi: import "ghomekodi.jsonnet",
-  cloudprint: import "cloudprint.jsonnet",
+  ghomekodi: (import "ghomekodi.jsonnet") {
+    config+: dummychange,
+  },
+  cloudprint: (import "cloudprint.jsonnet") {
+    config+: dummychange,
+  },
   echoheaders: import "echoheaders.jsonnet",
 }
