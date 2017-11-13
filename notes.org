@@ -1,0 +1,87 @@
+Network setup:
+Investigate (from recent openwrt release notes)
+- RFC 7788 - Home Networking Control Protocol
+- RFC 7084 - Basic Requirements for IPv6 Customer Edge Routers
+
+Consider https://github.com/coreos/torcx for storing local "patches"
+to reapply to an otherwise-immutable base image.
+
+Configure host sshd to accept certs signed by k8s CA.  Do short-term
+signatures, just for individual debugging exercises (12h?)
+
+** Install
+
+*** On master
+
+NB: local DNS preconfigured with `kube.lan` -> 192.168.0.9
+
+ip link add anycast0 type dummy || :
+ip addr replace 192.168.0.9/32 dev anycast0
+
+kubeadm init \
+   --node-name=$(cat /etc/machine-id) \
+   --pod-network-cidr=10.244.0.0/16 \
+   --apiserver-cert-extra-sans=kube.lan,kube.oldmacdonald.farm \
+   --apiserver-advertise-address=192.168.0.9 --token-ttl=12h \
+   --feature-gates=SelfHosting=true
+
+Need to hack in other ssh session (fixed upstream maybe?):
+ sed -i 's/initialDelaySeconds: [0-9]\+/initialDelaySeconds: 180/' /etc/kubernetes/manifests/kube-apiserver.yaml
+
+Edit /etc/kubernetes/manifests/kube-apiserver.yaml to add additional
+container:
+
+#+BEGIN_SRC yaml
+  - name: anycast
+    image: busybox
+    command:
+    - /bin/sh
+    - "-e"
+    - "-x"
+    - "-c"
+    - |
+      ip link add anycast0 type dummy || :
+      ip addr replace 192.168.0.9/32 dev anycast0
+      while :; do sleep 86400 & wait $!; done
+    securityContext:
+      capabilities:
+        add: ["NET_ADMIN"]
+#+END_SRC
+
+Go to k8s config section.
+
+*** On nodes (containos):
+
+Cert hash: (on master) `openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex`
+Get new token: (on master) `kubeadm token create --ttl 12h --groups system:bootstrappers:kubeadm:default-node-token`
+(explicit --groups is https://github.com/kubernetes/kubeadm/issues/483)
+
+kubeadm join \
+  --node-name=$(cat /etc/machine-id) \
+  --discovery-token-ca-cert-hash=sha256:$certhash \
+  --token $token kube.lan:6443
+
+*** On nodes (coreos):
+
+PXE boot into coreos (on ramdisk).
+wget http://192.168.0.9/coreos-kube.ign
+coreos-install -d /dev/sda -i coreos-kube.ign
+reboot
+
+docker run --rm -it \
+  -v /etc:/rootfs/etc \
+  -v /opt:/rootfs/opt \
+  -v /usr/bin:/rootfs/usr/bin \
+  -e K8S_VERSION=v1.7.7 \
+  xakra/kubeadm-installer coreos
+
+PATH=$PATH:/opt/bin
+sudo kubeadm join \
+  --node-name=$(cat /etc/machine-id) \
+  --discovery-token-ca-cert-hash=sha256:$certhash \
+  --token $token kube.lan:6443
+
+** K8s config
+
+scp root@kube.lan:/etc/kubernetes/admin.conf /tmp/kubeconfig
+./push.sh
