@@ -19,6 +19,8 @@ local archNodeSelector(a) = {nodeSelector+: {"beta.kubernetes.io/arch": a}};
 
   ns: kube.Namespace($.namespace.metadata.namespace),
 
+  serviceAccount: kube.ServiceAccount("update-agent") + $.namespace,
+
   updater_role: kube.ClusterRole("update-agent") {
     rules: [
       {
@@ -40,12 +42,7 @@ local archNodeSelector(a) = {nodeSelector+: {"beta.kubernetes.io/arch": a}};
   },
 
   updater_binding: kube.ClusterRoleBinding("update-agent") {
-    subjects: [{
-      kind: "ServiceAccount",
-      name: "default",
-      namespace: $.namespace.metadata.namespace,
-    }],
-
+    subjects_: [$.serviceAccount],
     roleRef_: $.updater_role,
   },
 
@@ -71,12 +68,7 @@ local archNodeSelector(a) = {nodeSelector+: {"beta.kubernetes.io/arch": a}};
   },
 
   update_lock_binding: kube.RoleBinding("update-agent-lock") + $.namespace {
-    subjects: [{
-      kind: "ServiceAccount",
-      name: "default",
-      namespace: $.namespace.metadata.namespace,
-    }],
-
+    subjects_: [$.serviceAccount],
     roleRef_: $.updater_lock_role,
   },
 
@@ -87,6 +79,7 @@ local archNodeSelector(a) = {nodeSelector+: {"beta.kubernetes.io/arch": a}};
         local name(path) = stripLeading("-", std.join("", [if isalpha(c) then c else "-" for c in std.stringChars(path)])),
 
         spec+: archNodeSelector(arch) + {
+          serviceAccountName: $.serviceAccount.metadata.name,
           containers_+: {
             update_agent: kube.Container("update-agent") {
               image: "quay.io/coreos/container-linux-update-operator:%s" % version,
@@ -118,6 +111,7 @@ local archNodeSelector(a) = {nodeSelector+: {"beta.kubernetes.io/arch": a}};
     spec+: {
       template+: {
         spec+: archNodeSelector(arch) + {
+          serviceAccountName: $.serviceAccount.metadata.name,
           containers_+: {
             update_operator: kube.Container("update-operator") {
               image: "quay.io/coreos/container-linux-update-operator:%s" % version,
