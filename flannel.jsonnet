@@ -1,6 +1,9 @@
-      local kube = import "kube.libsonnet";
+local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
+
+local flannel_version = "v0.9.0";
+local cniplugins_version = "v0.6.0";
 
 {
   namespace:: {
@@ -11,11 +14,20 @@ local utils = import "utils.libsonnet";
 
   cniconf:: {
     name: "cni0",
-    type: "flannel",
-    delegate: {
-      isDefaultGateway: true,
-      hairpinMode: true,
-    },
+    cniVersion: "0.3.1",
+    plugins: [
+      {
+        type: "flannel",
+        delegate: {
+          isDefaultGateway: true,
+          hairpinMode: true,
+        },
+      },
+      {
+        type: "portmap",
+        capabilities: {portMappings: true},
+      },
+    ],
   },
 
   netconf:: {
@@ -25,7 +37,7 @@ local utils = import "utils.libsonnet";
     },
   },
 
-  config: kube.ConfigMap("kube-flannel-cfg") + $.namespace {
+  config: utils.HashedConfigMap("kube-flannel-cfg") + $.namespace {
     metadata+: {
       labels+: {
 	tier: "node",
@@ -33,7 +45,7 @@ local utils = import "utils.libsonnet";
       },
     },
     data+: {
-      "cni-conf.json": kubecfg.manifestJson($.cniconf),
+      "cni-conflist.json": kubecfg.manifestJson($.cniconf),
       "net-conf.json": kubecfg.manifestJson($.netconf),
     },
   },
@@ -70,9 +82,11 @@ local utils = import "utils.libsonnet";
 	  serviceAccountName: $.serviceAccount.metadata.name,
 
           initContainers_+:: {
-	    installconf: kube.Container("install-conf") {
-              image: "busybox",
-              command: ["cp", "/etc/kube-flannel/cni-conf.json", "/etc/cni/net.d/10-flannel.conf"],
+	    installconf: utils.shcmd("install-conf") {
+              shcmd:: |||
+                rm -f /etc/cni/net.d/10-flannel.conf
+                cp /etc/kube-flannel/cni-conflist.json /etc/cni/net.d/10-flannel.conflist
+              |||,
               volumeMounts_+: {
                 cni: { mountPath: "/etc/cni/net.d/" },
                 cfg: { mountPath: "/etc/kube-flannel/", readOnly: true },
@@ -89,7 +103,7 @@ local utils = import "utils.libsonnet";
                 cnibin: { mountPath: "/opt/cni/bin/" },
               },
               env_+: {
-                VERSION: "v0.6.0",
+                VERSION: cniplugins_version,
                 ARCH: this.arch,
               },
             },
@@ -97,7 +111,7 @@ local utils = import "utils.libsonnet";
 
 	  containers_+: {
 	    default: kube.Container("kube-flannel") {
-	      image: "quay.io/coreos/flannel:v0.9.0-%s" % this.arch,
+	      image: "quay.io/coreos/flannel:%s-%s" % [flannel_version, this.arch],
 	      command: ["/opt/bin/flanneld", "--ip-masq", "--kube-subnet-mgr", "--iface=$(POD_IP)"],
 	      securityContext+: {
 		privileged: true,
