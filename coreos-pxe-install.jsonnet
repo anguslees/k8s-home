@@ -309,28 +309,15 @@ local sshKeys = [
 
                 "--pxe-prompt=Esc to avoid iPXE boot ...,5",
 
-                "--dhcp-boot=tag:!ipxe,undionly.kpxe,,$(POD_IP)",
-
                 // NB: tag handling is last-match-wins
-              ] + ["--dhcp-boot=tag:%s,%s,,$(POD_IP)" % b for b in [
-                //["BIOS", "undionly.kpxe"],
-                //["UEFI", "ipxe.efi"],
-                //["UEFI32", "ipxe32.efi"],
-                //["UEFI64", "ipxe.efi"],
-              ]] + [
+                "--dhcp-boot=tag:!ipxe,undionly.kpxe,,%s" % tftpserver,
 
                 "--pxe-service=tag:!ipxe,X86PC,Boot to undionly,undionly,%s" % tftpserver,
-                "--pxe-service=tag:!ipxe,X86-64_EFI,Boot to iPXE UEFI,ipxe,%s" % tftpserver,
-                "--pxe-service=tag:!ipxe,BC_EFI,Boot to iPXE UEFI PXE-BC,ipxe,%s" % tftpserver,
-
-                "--pxe-service=tag:!ipxe,X86PC,Boot to iPXE?,ipxe,%s" % tftpserver,
-
-                //"--dhcp-boot=tag:ipxe,%s/boot.ipxe" % http_url,
-                "--pxe-service=tag:ipxe,X86PC,Run boot.ipxe,%s/boot.ipxe" % http_url,
-                "--pxe-service=tag:ipxe,X86PC,Continue local boot,0",
-                "--pxe-service=tag:ipxe,X86-64_EFI,Run boot.ipxe,%s/boot.ipxe" % http_url,
-                "--pxe-service=tag:ipxe,X86-64_EFI,Continue local boot,0",
-              ],
+              ] + std.flattenArrays([[
+                "--pxe-service=tag:!ipxe,%s,Boot to iPXE,ipxe,%s" % [csa, tftpserver],
+                "--pxe-service=tag:ipxe,%s,Run boot.ipxe,%s/boot.ipx" % [csa, http_url],
+                "--pxe-service=tag:ipxe,%s,Continue local boot,0" % csa,
+              ] for csa in ["x86PC", "X86-64_EFI", "BC_EFI"]]),
 
               env_: {
                 POD_IP: kube.FieldRef("status.podIP"),
