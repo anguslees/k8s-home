@@ -58,13 +58,21 @@ local sshKeys = [
 	},
       ],
       */
+      local dir(path, mode="0755") = {
+        filesystem: "root",
+        path: path,
+        mode: kube.parseOctal(mode),
+      },
+      directories: [
+        dir("/etc/ssl/etcd/"),
+      ],
       local file(path, contents) = {
         filesystem: "root",
         path: path,
         contents: {
           source: "data:;base64," + std.base64(contents),
         },
-        mode: 420, // 0644
+        mode: kube.parseOctal("0644"),
       },
       files: [
         file("/etc/kubernetes/kubelet.env", |||
@@ -72,7 +80,6 @@ local sshKeys = [
                KUBELET_IMAGE_TAG=v1.7.5_coreos.0
              |||
             ),
-        file("/etc/ssl/etcd/.empty", "empty\n"),
         file("/etc/sysctl.d/max-user-watches.conf", |||
                fs.inotify.max_user_watches=16184
              |||
