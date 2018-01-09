@@ -42,6 +42,7 @@ local cups_server = "mongrel";
       template+: {
         spec+: {
           serviceAccountName: $.serviceAccount.metadata.name,
+          nodeSelector+: utils.archSelector("amd64"),
           containers_+: {
             default: kube.Container("gcp-connector") {
               image: "tianon/google-cloud-print-connector:1.13",
