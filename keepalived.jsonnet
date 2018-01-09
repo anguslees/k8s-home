@@ -10,7 +10,7 @@ local vipmap = {
   // NB: 192.168.0.50-100 is available for VIPs
   "kube-system/nginx-ingress": "192.168.0.50",
   //"default/kubernetes":  "192.168.0.51",  // doesn't work?
-  "coreos-pxe-install/coreos-pxe-httpd":  "192.168.0.52",
+  //"coreos-pxe-install/coreos-pxe-httpd":  "192.168.0.52", moved to nodeport
   "kube-system/nginx-ingress-internal": "192.168.0.53",
 
   // This might be desirable someday, but for now assert uniqueness.

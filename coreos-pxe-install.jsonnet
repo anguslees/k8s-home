@@ -245,10 +245,15 @@ local sshKeys = [
   httpdSvc: kube.Service("coreos-pxe-httpd") + $.namespace {
     local this = self,
     target_pod: $.httpd.spec.template,
-    port: 80,
+
     spec+: {
-      //type: "LoadBalancer",
-      loadBalancerIP: vips.vip(this),
+      type: "NodePort",
+      //loadBalancerIP: vips.vip(this),
+      ports: [{
+        port: 80,
+        nodePort: 31069,
+        targetPort: this.target_pod.spec.containers[0].ports[0].containerPort,
+      }],
     },
   },
 
@@ -288,7 +293,7 @@ local sshKeys = [
           containers_+: {
             dnsmasq: kube.Container("dnsmasq") {
               local arch = this.spec.template.spec.nodeSelector["beta.kubernetes.io/arch"],
-              local http_url = $.httpdSvc.http_url,
+              local http_url = "http://%s:%d" % ["$(HOST_IP)", $.httpdSvc.spec.ports[0].nodePort],
 
               // TFTP (not DHCP) could be served via a regular
               // Service, but it needs to be host-reachable, and we
@@ -330,6 +335,9 @@ local sshKeys = [
 
               env_: {
                 POD_IP: kube.FieldRef("status.podIP"),
+                // HOST_IP is same as POD_IP because hostNetwork=true.
+                // Used explicitly for clarity.
+                HOST_IP: kube.FieldRef("status.hostIP"),
               },
 
               ports_: {
