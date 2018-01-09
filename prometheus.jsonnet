@@ -2,25 +2,31 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
+local path_join(prefix, suffix) = (
+  if std.endsWith(prefix, "/") then prefix + suffix
+  else prefix + "/" + suffix
+);
+
 {
   namespace:: {metadata+: {namespace: "monitoring"}},
 
   ns: kube.Namespace($.namespace.metadata.namespace),
 
   ingress: utils.Ingress("prometheus") + $.namespace {
+    local this = self,
     local host = "prometheus.k.lan",
-    local prom_path = "/",
-    local am_path = "/alertmanager",
-    prom_url:: "http://%s%s" % [host, prom_path],
-    am_url:: "http://%s%s" % [host, am_path],
+    prom_path:: "/",
+    am_path:: "/alertmanager",
+    prom_url:: "http://%s%s" % [host, self.prom_path],
+    am_url:: "http://%s%s" % [host, self.am_path],
     spec+: {
       rules: [
         {
           host: host,
           http: {
             paths: [
-              {path: prom_path, backend: $.prometheus.svc.name_port},
-              {path: am_path, backend: $.alertmanager.svc.name_port},
+              {path: this.prom_path, backend: $.prometheus.svc.name_port},
+              {path: this.am_path, backend: $.alertmanager.svc.name_port},
             ],
           },
         },
@@ -67,7 +73,12 @@ local utils = import "utils.libsonnet";
     },
 
     svc: kube.Service("prometheus") + $.namespace {
-      metadata+: {annotations+: {"prometheus.io/scrape": "true"}},
+      metadata+: {
+        annotations+: {
+          "prometheus.io/scrape": "true",
+          "prometheus.io/path": path_join($.ingress.prom_path, "metrics"),
+        },
+      },
       target_pod: prom.deploy.spec.template,
     },
 
@@ -83,13 +94,14 @@ local utils = import "utils.libsonnet";
       //  sample. Thus, to plan the capacity of a Prometheus server,
       //  you can use the rough formula:
       //  needed_disk_space = retention_time_seconds * ingested_samples_per_second * bytes_per_sample
-      local retention_days = prom.deploy.spec.template.spec.containers_.default.args_.retention_days,
-      local retention_secs = retention_days * 86400,
-      local time_series = 1000, // wild guess
-      local samples_per_sec = time_series / $.config.global.scrape_interval_secs,
-      local bytes_per_sample = 2,
-      local needed_space = retention_secs * samples_per_sec * bytes_per_sample,
-      storage: "%dGi" % [needed_space / 1e9],
+      retention_days:: prom.deploy.spec.template.spec.containers_.default.args_.retention_days,
+      retention_secs:: self.retention_days * 86400,
+      time_series:: 1000, // wild guess
+      samples_per_sec:: self.time_series / $.config.global.scrape_interval_secs,
+      bytes_per_sample:: 2,
+      needed_space:: self.retention_secs * self.samples_per_sec * self.bytes_per_sample,
+      overhead_factor:: 1.5,
+      storage: "%dMi" % [self.overhead_factor * self.needed_space / 1e6],
     },
 
     deploy: kube.Deployment("prometheus") + $.namespace {
@@ -107,6 +119,8 @@ local utils = import "utils.libsonnet";
                 local this = self,
                 image: "prom/prometheus:v2.0.0",
                 args_+: {
+                  //"log.level": "debug",  // default is info
+
                   "web.external-url": $.ingress.prom_url,
 
                   "config.file": this.volumeMounts_.config.mountPath + "/prometheus.yml",
@@ -165,7 +179,13 @@ local utils = import "utils.libsonnet";
     local am = self,
 
     svc: kube.Service("alertmanager") + $.namespace {
-      metadata+: {annotations+: {"prometheus.io/scrape": "true"}},
+      metadata+: {
+        annotations+: {
+          "prometheus.io/scrape": "true",
+          "prometheus.io/scheme": "http",
+          "prometheus.io/path": path_join($.ingress.am_path, "metrics"),
+        },
+      },
       target_pod: am.deploy.spec.template,
     },
 

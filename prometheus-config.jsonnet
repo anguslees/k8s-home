@@ -10,11 +10,10 @@ local k8sScrape(role) = {
   bearer_token_file: "/var/run/secrets/kubernetes.io/serviceaccount/token",
 };
 
-local NAMESPACE = "__metadata_kubernetes_namespace";
-local SERVICE_NAME = "__metadata_kubernetes_service_name";
-local ENDPOINT_PORT_NAME = "__metadata_kubernetes_endpoint_port_name";
-local NODE_NAME = "__metadata_kubernetes_node_name";
-local ANNOTATION(key) = "__metadata_kubernetes_service_annotation_prometheus_io_" + key;
+local NAMESPACE = "__meta_kubernetes_namespace";
+local SERVICE_NAME = "__meta_kubernetes_service_name";
+local ENDPOINT_PORT_NAME = "__meta_kubernetes_endpoint_port_name";
+local NODE_NAME = "__meta_kubernetes_node_name";
 
 {
   global: {
@@ -116,6 +115,10 @@ local ANNOTATION(key) = "__metadata_kubernetes_service_annotation_prometheus_io_
 
     service_endpoints: k8sScrape("endpoints") {
       job_name: "kubernetes-service-endpoints",
+      scheme: "http",
+
+      local ANNOTATION(key) = "__meta_kubernetes_service_annotation_prometheus_io_" + key,
+
       relabel_configs: [
         {
           source_labels: [ANNOTATION("scrape")],
@@ -170,6 +173,8 @@ local ANNOTATION(key) = "__metadata_kubernetes_service_annotation_prometheus_io_
       params: {module: ["http_2xx"]},
       kubernetes_sd_configs: [{role: "service"}],
 
+      local ANNOTATION(key) = "__meta_kubernetes_service_annotation_prometheus_io_" + key,
+
       relabel_configs: [
         {
           source_labels: [ANNOTATION("probe")],
@@ -208,6 +213,8 @@ local ANNOTATION(key) = "__metadata_kubernetes_service_annotation_prometheus_io_
       metrics_path: "/probe",
       params: {module: ["http_2xx"]},
       kubernetes_sd_configs: [{role: "ingress"}],
+
+      local ANNOTATION(key) = "__meta_kubernetes_ingress_annotation_prometheus_io_" + key,
 
       relabel_configs: [
         {
@@ -260,6 +267,8 @@ local ANNOTATION(key) = "__metadata_kubernetes_service_annotation_prometheus_io_
     pods: {
       job_name: "kubernetes-pods",
       kubernetes_sd_configs: [{role: "pod"}],
+
+      local ANNOTATION(key) = "__meta_kubernetes_pod_annotation_prometheus_io_" + key,
 
       relabel_configs: [
         {
