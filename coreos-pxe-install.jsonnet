@@ -3,6 +3,8 @@ local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 local vips = import "keepalived.jsonnet";
 
+local coreos_kubelet_tag = "v1.8.2_coreos.0";
+
 local default_env = {
   http_proxy: "http://192.168.0.10:3128/",
   no_proxy: ".lan,.local",
@@ -77,8 +79,8 @@ local sshKeys = [
       files: [
         file("/etc/kubernetes/kubelet.env", |||
                KUBELET_IMAGE_URL=quay.io/coreos/hyperkube
-               KUBELET_IMAGE_TAG=v1.7.5_coreos.0
-             |||
+               KUBELET_IMAGE_TAG=%(tag)s
+             ||| % {tag: coreos_kubelet_tag},
             ),
         file("/etc/sysctl.d/max-user-watches.conf", |||
                fs.inotify.max_user_watches=16184
