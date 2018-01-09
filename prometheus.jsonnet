@@ -309,4 +309,111 @@ local path_join(prefix, suffix) = (
       },
     },
   },
+
+  ksm: {
+    serviceAccount: kube.ServiceAccount("kube-state-metrics") + $.namespace,
+
+    clusterRole: kube.ClusterRole("kube-state-metrics") {
+      local listwatch = {
+        "": ["nodes", "pods", "services", "resourcequotas", "replicationcontrollers", "limitranges", "persistentvolumeclaims", "namespaces"],
+        extensions: ["daemonsets", "deployments", "replicasets"],
+        apps: ["statefulsets"],
+        batch: ["cronjobs", "jobs"],
+      },
+      all_resources:: std.set(std.flattenArrays(kube.objectValues(listwatch))),
+      rules: [{
+        apiGroups: [k],
+        resources: listwatch[k],
+        verbs: ["list", "watch"],
+      } for k in std.objectFields(listwatch)],
+    },
+
+    clusterRoleBinding: kube.ClusterRoleBinding("kube-state-metrics") {
+      roleRef_: $.ksm.clusterRole,
+      subjects_: [$.ksm.serviceAccount],
+    },
+
+    role: kube.Role("kube-state-metrics-resizer") + $.namespace {
+      rules: [
+        {
+          apiGroups: [""],
+          resources: ["pods"],
+          verbs: ["get"],
+        },
+        {
+          apiGroups: ["extensions"],
+          resources: ["deployments"],
+          resourceNames: ["kube-state-metrics"],
+          verbs: ["get", "update"],
+        },
+      ],
+    },
+
+    roleBinding: kube.RoleBinding("kube-state-metrics") + $.namespace {
+      roleRef_: $.ksm.role,
+      subjects_: [$.ksm.serviceAccount],
+    },
+
+    deploy: kube.Deployment("kube-state-metrics") + $.namespace {
+      local deploy = self,
+      spec+: {
+        template+: {
+          metadata+: {
+            annotations+: {
+              "prometheus.io/scrape": "true",
+              "prometheus.io/port": "8080",
+            },
+          },
+          spec+: {
+            local spec = self,
+            serviceAccountName: $.ksm.serviceAccount.metadata.name,
+            nodeSelector: utils.archSelector("amd64"),
+            containers_+: {
+              default+: kube.Container("ksm") {
+                image: "quay.io/coreos/kube-state-metrics:v1.1.0",
+                ports_: {
+                  metrics: {containerPort: 8080},
+                },
+                args_: {
+                  collectors_:: std.set([
+                    // remove "cronjobs" for kubernetes/kube-state-metrics#295
+                    "daemonsets", "deployments", "limitranges", "nodes", "pods", "replicasets", "replicationcontrollers", "resourcequotas", "services", "jobs", "statefulsets", "persistentvolumeclaims",
+                  ]),
+                  collectors: std.join(",", self.collectors_),
+                },
+                local no_access = std.setDiff(self.args_.collectors_, $.ksm.clusterRole.all_resources),
+                assert std.length(no_access) == 0 : "Missing clusterRole access for resources %s" % no_access,
+                readinessProbe: {
+                  httpGet: {path: "/healthz", port: 8080},
+                  initialDelaySeconds: 5,
+                  timeoutSeconds: 5,
+                },
+              },
+              resizer: kube.Container("addon-resizer") {
+                image: "gcr.io/google_containers/addon-resizer:1.0",
+                command: ["/pod_nanny"],
+                args_+: {
+                  container: spec.containers[0].name,
+                  cpu: "100m",
+                  "extra-cpu": "1m",
+                  memory: "100Mi",
+                  "extra-memory": "2Mi",
+                  threshold: 5,
+                  deployment: deploy.metadata.name,
+                },
+                env_+: {
+                  MY_POD_NAME: kube.FieldRef("metadata.name"),
+                  MY_POD_NAMESPACE: kube.FieldRef("metadata.namespace"),
+                },
+                resources: {
+                  limits: {cpu: "100m", memory: "30Mi"},
+                  requests: self.limits,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
 }
