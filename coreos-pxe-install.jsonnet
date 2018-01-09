@@ -315,7 +315,7 @@ local sshKeys = [
                 "--pxe-service=tag:!ipxe,X86PC,Boot to undionly,undionly,%s" % tftpserver,
               ] + std.flattenArrays([[
                 "--pxe-service=tag:!ipxe,%s,Boot to iPXE,ipxe,%s" % [csa, tftpserver],
-                "--pxe-service=tag:ipxe,%s,Run boot.ipxe,%s/boot.ipx" % [csa, http_url],
+                "--pxe-service=tag:ipxe,%s,Run boot.ipxe,%s/boot.ipxe" % [csa, http_url],
                 "--pxe-service=tag:ipxe,%s,Continue local boot,0" % csa,
               ] for csa in ["x86PC", "X86-64_EFI", "BC_EFI"]]),
 
