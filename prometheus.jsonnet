@@ -218,7 +218,7 @@ local path_join(prefix, suffix) = (
             },
             containers_+: {
               default: kube.Container("alertmanager") {
-                image: "prom/alertmanager:v0.9.1",
+                image: "quay.io/prometheus/alertmanager:v0.13.0",
                 args_+: {
                   "config.file": "/etc/alertmanager/config.yml",
                   "storage.path": "/alertmanager",
@@ -232,12 +232,22 @@ local path_join(prefix, suffix) = (
                   templates: {mountPath: "/etc/alertmanager-templates", readOnly: true},
                   storage: {mountPath: "/alertmanager"},
                 },
+                livenessProbe+: {
+                  httpGet: {path: "/alertmanager/-/healthy", port: 9093},
+                  initialDelaySeconds: 60,
+                  failureThreshold: 10,
+                },
+                readinessProbe+: self.livenessProbe {
+                  initialDelaySeconds: 3,
+                  timeoutSeconds: 3,
+                  periodSeconds: 3,
+                },
               },
               config_reload: kube.Container("configmap-reload") {
                 image: "jimmidyson/configmap-reload:v0.1",
                 args_+: {
                   "volume-dir": "/config",
-                  "webhook-url": "http://localhost:9093/-/reload",
+                  "webhook-url": "http://localhost:9093/alertmanager/-/reload",
                 },
                 volumeMounts_+: {
                   config: { mountPath: "/config", readOnly: true },
@@ -273,7 +283,7 @@ local path_join(prefix, suffix) = (
             }],
             containers_+: {
               default: kube.Container("node-exporter") {
-                image: "prom/node-exporter:v0.15.1",  // fixme: +this.arch
+                image: "prom/node-exporter:v0.15.2",  // fixme: +this.arch
                 local v = self.volumeMounts_,
                 args_+: {
                   "path.procfs": v.procfs.mountPath,
