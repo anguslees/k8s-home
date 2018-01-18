@@ -17,9 +17,10 @@ local utils = import "utils.libsonnet";
     spec+: {
       template+: {
         spec+: {
+          nodeSelector+: utils.archSelector("amd64"),
           containers_+: {
             default: kube.Container("echoheaders") {
-              image: "gcr.io/google_containers/echoserver:1.4",
+              image: "gcr.io/google_containers/echoserver:1.8",
               ports_: {
                 http: {containerPort: 8080},
               },
