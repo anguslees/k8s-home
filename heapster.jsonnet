@@ -1,6 +1,6 @@
 local kube = import "kube.libsonnet";
 
-local arch = "arm";
+local arch = "amd64";
 local version = "v1.4.3";
 
 {
