@@ -1,4 +1,5 @@
 local kube = import "kube.libsonnet";
+local utils = import "utils.libsonnet";
 
 local arch = "amd64";
 local image = "gcr.io/google_containers/kube-keepalived-vip:0.11";
@@ -66,9 +67,7 @@ local vipmap = {
         spec+: {
           hostNetwork: true,
           serviceAccountName: $.serviceAccount.metadata.name,
-	  nodeSelector: {
-	    "beta.kubernetes.io/arch": arch,
-	  },
+	  nodeSelector+: utils.archSelector(arch),
           podAntiAffinity+: {
             requiredDuringSchedulingIgnoredDuringExecution+: [{
                 labelSelector: {matchLabels: this.spec.selector},
