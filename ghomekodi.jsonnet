@@ -57,6 +57,7 @@ local port = 8099;
     spec+: {
       template+: {
         spec+: {
+          nodeSelector+: utils.archSelector("amd64"),
           volumes_+: {
             config: kube.SecretVolume($.config),
           },
