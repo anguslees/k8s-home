@@ -110,6 +110,7 @@ local path_join(prefix, suffix) = (
           spec+: {
             terminationGracePeriodSeconds: 300,
             serviceAccountName: prom.serviceAccount.metadata.name,
+            nodeSelector+: utils.archSelector("amd64"),
             volumes_+: {
               config: kube.ConfigMapVolume(prom.config),
               data: kube.PersistentVolumeClaimVolume(prom.data),
@@ -209,6 +210,7 @@ local path_join(prefix, suffix) = (
       spec+: {
         template+: {
           spec+: {
+            nodeSelector+: utils.archSelector("amd64"),
             volumes_+: {
               config: kube.ConfigMapVolume(am.config),
               templates: kube.ConfigMapVolume(am.templates),
