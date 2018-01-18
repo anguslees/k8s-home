@@ -22,6 +22,7 @@ local utils = import "utils.libsonnet";
       template+: {
         spec+: {
           automountServiceAccountToken: false,
+          nodeSelector+: utils.archSelector("amd64"),
           containers_+: {
             default: kube.Container("dyndns") {
               image: "tunix/digitalocean-dyndns",
