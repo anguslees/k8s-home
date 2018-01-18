@@ -7,4 +7,4 @@ KUBECFG_JPATH=$HOME/go/src/github.com/ksonnet/kubecfg/lib:$HOME/src/ksonnet-lib:
 export KUBECONFIG KUBECFG_JPATH
 
 exec kubecfg \
-    update -v --gc-tag=garagecloud -V RANDOM=$(date +%s) "$@" all.jsonnet
+    update --gc-tag=garagecloud -V RANDOM=$(date +%s) "$@" all.jsonnet
