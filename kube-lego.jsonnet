@@ -1,4 +1,5 @@
 local kube = import "kube.libsonnet";
+local utils = import "utils.libsonnet";
 
 {
   namespace:: {metadata+: {namespace: "kube-lego"}},
@@ -53,6 +54,7 @@ local kube = import "kube.libsonnet";
       template+: {
         spec+: {
           serviceAccountName: $.serviceAccount.metadata.name,
+          nodeSelector+: utils.archSelector("amd64"),
           containers_+: {
             default: kube.Container("kube-lego") {
               image: "jetstack/kube-lego:0.1.5",
