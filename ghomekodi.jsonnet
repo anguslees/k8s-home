@@ -15,7 +15,7 @@ local port = 8099;
 
   ingress: utils.Webhook("google-home-kodi", "/ifttt-kodi") + $.namespace {
     metadata+: {
-      annotations+: {"ingress.kubernetes.io/rewrite-target": "/"},
+      annotations+: {"nginx.ingress.kubernetes.io/rewrite-target": "/"},
     },
     target_svc: $.svc,
   },

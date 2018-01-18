@@ -178,7 +178,7 @@ local vips = import "keepalived.jsonnet";
           terminationGracePeriodSeconds: 60,
           containers_+: {
             default: kube.Container("nginx") {
-              image: "gcr.io/google_containers/nginx-ingress-controller:0.9.0-beta.15",
+              image: "quay.io/kubernetes-ingress-controller/nginx-ingress-controller:0.9.0",
               env_+: {
                 POD_NAME: kube.FieldRef("metadata.name"),
                 POD_NAMESPACE: kube.FieldRef("metadata.namespace"),
