@@ -263,7 +263,7 @@ local sshKeys = [
         spec+: pxeNodeSelector {
           containers_+: {
             httpd: kube.Container("httpd") {
-              image: "armhf/httpd:2.4",
+              image: "arm32v7/httpd:2.4.29",
               ports_+: {
                 http: { containerPort: 80 },
               },
