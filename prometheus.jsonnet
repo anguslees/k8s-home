@@ -118,7 +118,7 @@ local path_join(prefix, suffix) = (
             containers_+: {
               default: kube.Container("prometheus") {
                 local this = self,
-                image: "prom/prometheus:v2.0.0",
+                image: "prom/prometheus:v2.1.0",
                 args_+: {
                   //"log.level": "debug",  // default is info
 
@@ -152,7 +152,7 @@ local path_join(prefix, suffix) = (
                 livenessProbe: {
                   httpGet: {path: "/", port: this.ports[0].name},
                   // Crash recovery can take a long time (~1 minute)
-                  initialDelaySeconds: 3 * 60,
+                  initialDelaySeconds: 10 * 60,
                 },
                 readinessProbe: self.livenessProbe {
                   successThreshold: 2,
