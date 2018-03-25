@@ -9,7 +9,7 @@
 
   ssecrets: import "sealed-secrets.jsonnet",
 
-  keepalived: import "keepalived.jsonnet",
+  metallb: import "metallb.jsonnet",
   nginx_ingress: import "nginx-ingress.jsonnet",
   kube_lego: import "kube-lego.jsonnet",
   dyndns: import "dyndns.jsonnet",

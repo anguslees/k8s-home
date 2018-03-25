@@ -162,9 +162,8 @@ local vips = import "keepalived.jsonnet";
         {name: "http", port: 80, protocol: "TCP"},
         {name: "https", port: 443, protocol: "TCP"},
       ],
-      //externalIPs+: [vips.vip(this)],
-      externalIPs: [],
-      loadBalancerIP: vips.vip(this),
+      loadBalancerIP: "192.168.0.50",
+      type: "LoadBalancer",
     },
   },
 
@@ -188,7 +187,7 @@ local vips = import "keepalived.jsonnet";
                 "default-backend-service": "$(POD_NAMESPACE)/" + $.defaultSvc.metadata.name,
                 configmap: "$(POD_NAMESPACE)/" + $.config.metadata.name,
                 // publish-service requires svc to have .Status.LoadBalancer.Ingress
-                //"publish-service": "$(POD_NAMESPACE)/" + $.service.metadata.name,
+                "publish-service": "$(POD_NAMESPACE)/" + $.service.metadata.name,
 
                 "tcp-services-configmap": "$(POD_NAMESPACE)/" + $.tcpconf.metadata.name,
                 "udp-services-configmap": "$(POD_NAMESPACE)/" + $.udpconf.metadata.name,
@@ -219,6 +218,10 @@ local vips = import "keepalived.jsonnet";
   serviceIntern: $.service {
     metadata+: {name: super.name + "-internal"},
     target_pod: $.controllerIntern.spec.template,
+    spec+: {
+      loadBalancerIP: "192.168.0.53",
+      loadBalancerSourceRanges: ["192.168.0.0/24"],
+    },
   },
 
   controllerIntern: $.controller {
@@ -232,7 +235,7 @@ local vips = import "keepalived.jsonnet";
                 "ingress-class": "nginx-internal",
 
                 // publish-service requires svc to have .Status.LoadBalancer.Ingress
-                //"publish-service": "$(POD_NAMESPACE)/" + $.serviceIntern.metadata.name,
+                "publish-service": "$(POD_NAMESPACE)/" + $.serviceIntern.metadata.name,
 
                 "tcp-services-configmap": "$(POD_NAMESPACE)/" + $.tcpconfIntern.metadata.name,
                 "udp-services-configmap": "$(POD_NAMESPACE)/" + $.udpconfIntern.metadata.name,

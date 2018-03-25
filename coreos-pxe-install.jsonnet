@@ -1,7 +1,6 @@
 local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
-local vips = import "keepalived.jsonnet";
 
 local coreos_kubelet_tag = "v1.8.2_coreos.0";
 
@@ -248,7 +247,6 @@ local sshKeys = [
 
     spec+: {
       type: "NodePort",
-      //loadBalancerIP: vips.vip(this),
       ports: [{
         port: 80,
         nodePort: 31069,
