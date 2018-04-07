@@ -149,12 +149,15 @@ local path_join(prefix, suffix) = (
                 resources: {
                   requests: {cpu: "500m", memory: "500Mi"},
                 },
-                livenessProbe: {
+                livenessProbe: self.readinessProbe {
                   httpGet: {path: "/", port: this.ports[0].name},
-                  // Crash recovery can take a long time (~1 minute)
-                  initialDelaySeconds: 10 * 60,
+                  // Crash recovery can take a _long_ time (many
+                  // minutes), depending on the time since last
+                  // successful compaction.
+                  initialDelaySeconds: 20 * 60,  // I have seen >10mins
                 },
-                readinessProbe: self.livenessProbe {
+                readinessProbe: {
+                  httpGet: {path: "/", port: this.ports[0].name},
                   successThreshold: 2,
                   initialDelaySeconds: 5,
                 },
