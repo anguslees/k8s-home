@@ -85,7 +85,9 @@ local cniplugins_version = "v0.6.0";
 	    installconf: utils.shcmd("install-conf") {
               shcmd:: |||
                 rm -f /etc/cni/net.d/10-flannel.conf
-                cp /etc/kube-flannel/cni-conflist.json /etc/cni/net.d/10-flannel.conflist
+                tmp=/etc/cni/net.d/.tmp-flannel-cfg
+                cp /etc/kube-flannel/cni-conflist.json $tmp
+                mv $tmp /etc/cni/net.d/10-flannel.conflist
               |||,
               volumeMounts_+: {
                 cni: { mountPath: "/etc/cni/net.d/" },
@@ -167,10 +169,6 @@ local cniplugins_version = "v0.6.0";
 
   clusterRoleBinding: kube.ClusterRoleBinding("flannel") {
     roleRef_: $.clusterRole,
-    subjects: [{
-      kind: "ServiceAccount",
-      name: $.serviceAccount.metadata.name,
-      namespace: $.serviceAccount.metadata.namespace,
-    }],
+    subjects_: [$.serviceAccount],
   },
 }
