@@ -89,7 +89,7 @@ local version = "v1.4.3";
               },
               resources: {
                 limits: { cpu: "50m", memory: "90Mi" },
-                request: self.limits,
+                requests: self.limits,
               },
               env_+: {
                 MY_POD_NAME: kube.FieldRef("metadata.name"),
