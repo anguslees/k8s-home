@@ -39,4 +39,7 @@
   ghomekodi: import "ghomekodi.jsonnet",
   cloudprint: import "cloudprint.jsonnet",
   echoheaders: import "echoheaders.jsonnet",
+  jenkins: (import "jenkins.jsonnet") {
+    http_proxy: $.webcache.svc,
+  },
 }
