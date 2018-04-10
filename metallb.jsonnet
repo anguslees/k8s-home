@@ -181,11 +181,13 @@ local version = "v0.4.6";
             serviceAccountName: $.speaker.sa.metadata.name,
             terminationGracePeriodSeconds: 0,
             hostNetwork: true,
-            podAntiAffinity+: {
-              requiredDuringSchedulingIgnoredDuringExecution+: [{
-                labelSelector: {matchLabels: this.spec.selector},
-                topologyKey: "kubernetes.io/hostname",
-              }],
+            affinity+: {
+              podAntiAffinity+: {
+                requiredDuringSchedulingIgnoredDuringExecution+: [{
+                  labelSelector: this.spec.selector,
+                  topologyKey: "kubernetes.io/hostname",
+                }],
+              },
             },
             containers_+: {
               speaker: kube.Container("speaker") {
