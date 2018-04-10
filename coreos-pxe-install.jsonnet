@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local coreos_kubelet_tag = "v1.8.2_coreos.0";
+local coreos_kubelet_tag = "v1.8.11_coreos.0";
 
 local default_env = {
   http_proxy: "http://192.168.0.10:3128/",
