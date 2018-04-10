@@ -30,8 +30,10 @@
     config+: {global+: {external_labels+: {cluster: "home"}}},
   },
 
-  //docker_ipfs: import "docker-ipfs.jsonnet",
   ipfs: import "ipfs.jsonnet",
+  docker_ipfs: (import "docker-ipfs.jsonnet") {
+    ipfsSvc: $.ipfs.svc,
+  },
 
   webcache: import "webcache.jsonnet",
   ghomekodi: import "ghomekodi.jsonnet",
