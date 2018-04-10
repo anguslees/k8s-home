@@ -31,7 +31,7 @@
   },
 
   //docker_ipfs: import "docker-ipfs.jsonnet",
-  //ipfs: import "ipfs.jsonnet",
+  ipfs: import "ipfs.jsonnet",
 
   webcache: import "webcache.jsonnet",
   ghomekodi: import "ghomekodi.jsonnet",
