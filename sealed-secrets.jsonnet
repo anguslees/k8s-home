@@ -20,7 +20,7 @@ local image = "quay.io/bitnami/sealed-secrets-controller:v0.5.1";
               properties: {
                 data: {
                   type: "string",
-                  pattern: "^[^A-Za-z0-9+/=]*$", // base64
+                  pattern: "^[A-Za-z0-9+/=]*$", // base64
                 },
               },
             },
