@@ -38,7 +38,67 @@ local path_join(prefix, suffix) = (
     rule_files+: std.objectFields($.rules),
   },
   rules:: {
+    // See also: https://github.com/coreos/prometheus-operator/tree/master/contrib/kube-prometheus/assets/prometheus/rules
     // "foo.yml": {...},
+    basic_:: {
+      groups: [
+        {
+          name: "basic.rules",
+          rules: [
+            {
+              alert: "K8sApiUnavailable",
+              expr: "max(up{job=\"kubernetes_apiservers\"}) != 1",
+              "for": "10m",
+              annotations: {
+                summary: "Kubernetes API is unavailable",
+                description: "Kubernetes API is not responding",
+              },
+            },
+            {
+              alert: "CrashLooping",
+              expr: "sum(rate(kube_pod_container_status_restarts[15m])) BY (namespace, container) * 3600 > 0",
+              "for": "1h",
+              labels: {severity: "notice"},
+              annotations: {
+                summary: "Frequently restarting container",
+                description: "{{$labels.namespace}}/{{$labels.container}} is restarting {{$value}} times per hour",
+              },
+            },
+          ],
+        },
+      ],
+    },
+    "basic.yaml": kubecfg.manifestYaml(self.basic_),
+    monitoring_:: {
+      groups: [
+        {
+          name: "monitoring.rules",
+          rules: [
+            {
+              alert: "PrometheusBadConfig",
+              expr: "prometheus_config_last_reload_successful{kubernetes_namespace=\"%s\"} == 0" % $.namespace.metadata.namespace,
+              "for": "10m",
+              labels: {severity: "critical"},
+              annotations: {
+                summary: "Prometheus failed to reload config",
+                description: "Config error with prometheus, see container logs",
+              },
+            },
+            {
+              alert: "AlertmanagerBadConfig",
+              expr: "alertmanager_config_last_reload_successful{kubernetes_namespace=\"%s\"} == 0" % $.namespace.metadata.namespace,
+              "for": "10m",
+              labels: {severity: "critical"},
+              annotations: {
+                summary: "Alertmanager failed to reload config",
+                description: "Config error with alertmanager, see container logs",
+              },
+            },
+          ],
+        },
+      ],
+    },
+    "monitoring.yml": kubecfg.manifestYaml(self.monitoring_),
   },
 
   am_config:: (import "alertmanager-config.jsonnet"),
@@ -74,10 +134,7 @@ local path_join(prefix, suffix) = (
 
     svc: kube.Service("prometheus") + $.namespace {
       metadata+: {
-        annotations+: {
-          "prometheus.io/scrape": "true",
-          "prometheus.io/path": path_join($.ingress.prom_path, "metrics"),
-        },
+        annotations+: {"kubernetes.io/cluster-service": "true"},
       },
       target_pod: prom.deploy.spec.template,
     },
@@ -107,6 +164,13 @@ local path_join(prefix, suffix) = (
     deploy: kube.Deployment("prometheus") + $.namespace {
       spec+: {
         template+: {
+          metadata+: {
+            annotations+: {
+              "prometheus.io/scrape": "true",
+              "prometheus.io/port": "9090",
+              "prometheus.io/path": path_join($.ingress.prom_path, "metrics"),
+            },
+          },
           spec+: {
             terminationGracePeriodSeconds: 300,
             serviceAccountName: prom.serviceAccount.metadata.name,
@@ -115,10 +179,13 @@ local path_join(prefix, suffix) = (
               config: kube.ConfigMapVolume(prom.config),
               data: kube.PersistentVolumeClaimVolume(prom.data),
             },
+            securityContext+: {
+              fsGroup: 65534, // nobody:nogroup
+            },
             containers_+: {
               default: kube.Container("prometheus") {
                 local this = self,
-                image: "prom/prometheus:v2.1.0",
+                image: "prom/prometheus:v2.2.1",
                 args_+: {
                   //"log.level": "debug",  // default is info
 
@@ -155,6 +222,7 @@ local path_join(prefix, suffix) = (
                   // minutes), depending on the time since last
                   // successful compaction.
                   initialDelaySeconds: 20 * 60,  // I have seen >10mins
+                  successThreshold: 1,
                 },
                 readinessProbe: {
                   httpGet: {path: "/", port: this.ports[0].name},
@@ -184,11 +252,7 @@ local path_join(prefix, suffix) = (
 
     svc: kube.Service("alertmanager") + $.namespace {
       metadata+: {
-        annotations+: {
-          "prometheus.io/scrape": "true",
-          "prometheus.io/scheme": "http",
-          "prometheus.io/path": path_join($.ingress.am_path, "metrics"),
-        },
+        annotations+: {"kubernetes.io/cluster-service": "true"},
       },
       target_pod: am.deploy.spec.template,
     },
@@ -212,6 +276,14 @@ local path_join(prefix, suffix) = (
     deploy: kube.Deployment("alertmanager") + $.namespace {
       spec+: {
         template+: {
+          metadata+: {
+            annotations+: {
+              "prometheus.io/scrape": "true",
+              "prometheus.io/scheme": "http",
+              "prometheus.io/port": "9093",
+              "prometheus.io/path": path_join($.ingress.am_path, "metrics"),
+            },
+          },
           spec+: {
             nodeSelector+: utils.archSelector("amd64"),
             volumes_+: {
@@ -405,7 +477,7 @@ local path_join(prefix, suffix) = (
                 },
               },
               resizer: kube.Container("addon-resizer") {
-                image: "gcr.io/google_containers/addon-resizer:1.0",
+                image: "gcr.io/google_containers/addon-resizer:2.1",
                 command: ["/pod_nanny"],
                 args_+: {
                   container: spec.containers[0].name,
@@ -413,7 +485,6 @@ local path_join(prefix, suffix) = (
                   "extra-cpu": "1m",
                   memory: "100Mi",
                   "extra-memory": "2Mi",
-                  threshold: 5,
                   deployment: deploy.metadata.name,
                 },
                 env_+: {
