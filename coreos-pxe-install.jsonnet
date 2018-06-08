@@ -258,15 +258,18 @@ local sshKeys = [
   httpd: kube.Deployment("coreos-pxe-httpd") + $.namespace {
     spec+: {
       template+: {
-        spec+: pxeNodeSelector {
+        spec+: utils.toleratesMaster {
           containers_+: {
             httpd: kube.Container("httpd") {
-              image: "arm32v7/httpd:2.4.29",
+              image: "httpd:2.4.33-alpine",
               ports_+: {
                 http: { containerPort: 80 },
               },
               volumeMounts_: {
                 htdocs: { mountPath: "/usr/local/apache2/htdocs", readOnly: true },
+              },
+              resources+: {
+                requests+: {memory: "10Mi"},
               },
             },
           },
