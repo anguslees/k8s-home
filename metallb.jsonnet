@@ -1,7 +1,7 @@
 local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 
-local version = "v0.4.6";
+local version = "v0.6.2";
 
 {
   namespace:: {metadata+: {namespace: "metallb"}},
@@ -12,15 +12,9 @@ local version = "v0.4.6";
       config_:: {
         "address-pools": [{
           name: "lan",
-          protocol: "arp",
-          "arp-network": "192.168.0.0/24",
-          cidr: [
-            // 192.168.0.{50-100} in cidr-speak
-            "192.168.0.50/31",
-            "192.168.0.52/30",
-            "192.168.0.56/29",
-            "192.168.0.64/27",
-            "192.168.0.96/30",
+          protocol: "layer2",
+          addresses: [
+            "192.168.0.50-192.168.0.100",
           ],
         }],
       },
