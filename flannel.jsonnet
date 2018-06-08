@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local flannel_version = "v0.9.0";
+local flannel_version = "v0.10.0";
 local cniplugins_version = "v0.6.0";
 
 {
@@ -62,12 +62,7 @@ local cniplugins_version = "v0.6.0";
       },
     },
     spec+: {
-      template+: {
-        metadata+: {
-          annotations+: {
-            "scheduler.alpha.kubernetes.io/critical-pod": "",
-          },
-        },
+      template+: utils.CriticalPodSpec {
 	spec+: {
 	  hostNetwork: true,
 	  nodeSelector: {
