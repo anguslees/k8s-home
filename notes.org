@@ -3,11 +3,16 @@ Investigate (from recent openwrt release notes)
 - RFC 7788 - Home Networking Control Protocol
 - RFC 7084 - Basic Requirements for IPv6 Customer Edge Routers
 
+See also https://typhoon.psdn.io/bare-metal/ and
+https://github.com/kubermesh/kubermesh
+
 Consider https://github.com/coreos/torcx for storing local "patches"
 to reapply to an otherwise-immutable base image.
 
 Configure host sshd to accept certs signed by k8s CA.  Do short-term
 signatures, just for individual debugging exercises (12h?)
+
+kured: kubernetes reboot daemon - https://github.com/weaveworks/kured
 
 ** Install
 
@@ -28,26 +33,6 @@ kubeadm init \
 Need to hack in other ssh session (fixed upstream maybe?):
  sed -i 's/initialDelaySeconds: [0-9]\+/initialDelaySeconds: 180/' /etc/kubernetes/manifests/kube-apiserver.yaml
 
-Edit /etc/kubernetes/manifests/kube-apiserver.yaml to add additional
-container:
-
-#+BEGIN_SRC yaml
-  - name: anycast
-    image: busybox
-    command:
-    - /bin/sh
-    - "-e"
-    - "-x"
-    - "-c"
-    - |
-      ip link add anycast0 type dummy || :
-      ip addr replace 192.168.0.9/32 dev anycast0
-      while :; do sleep 86400 & wait $!; done
-    securityContext:
-      capabilities:
-        add: ["NET_ADMIN"]
-#+END_SRC
-
 Go to k8s config section.
 
 *** On nodes (containos):
@@ -61,11 +46,18 @@ kubeadm join \
   --discovery-token-ca-cert-hash=sha256:$certhash \
   --token $token kube.lan:6443
 
+**** bananapi fyi:
+
+Can flash leds to identify a physical machine:
+`cat /sys/class/leds/bananapi:green:usr/trigger` shows values.
+    echo heartbeat > /sys/class/leds/bananapi:green:usr/trigger
+    echo none > /sys/class/leds/bananapi:green:usr/trigger
+
 *** On nodes (coreos):
 
 PXE boot into coreos (on ramdisk).
-wget http://192.168.0.9/coreos-kube.ign
-coreos-install -d /dev/sda -i coreos-kube.ign
+wget http://192.168.0.9:31069/coreos-kube.ign
+sudo coreos-install -d /dev/sda -i coreos-kube.ign
 reboot
 
 docker run --rm -it \
@@ -83,5 +75,97 @@ sudo kubeadm join \
 
 ** K8s config
 
+Edit daemonset/self-hosted-kube-apiserver to set
+`--etcd-quorum-read=true` (quorum=false should not exist, grumble, grumble)
+
 scp root@kube.lan:/etc/kubernetes/admin.conf /tmp/kubeconfig
 ./push.sh
+
+** Self-hosted master-reboot recovery
+
+(on master)
+
+Will boot up, run etcd (from /e/k/manifests), and then sit.
+
+kubeadm alpha phase controlplane all \
+ --pod-network-cidr=10.244.0.0/16 \
+ --apiserver-advertise-address=192.168.0.9
+
+Wait for control plane to come up.  Will read etcd and start up
+self-hosted control jobs.  self-hosted jobs will crash-loop because
+addresses/locks are in use.  When this is happening:
+
+rm /etc/kubernetes/manifests/kube-{apiserver,controller-manager,scheduler}.yaml
+
+** HA migration
+
+Set up single (self-hosted) master using kubeadm as usual.
+
+*** Join new node
+
+Join new (potential master) node as normal:
+kubeadm join \
+  --node-name=$(cat /etc/machine-id) \
+  --discovery-token-ca-cert-hash=sha256:$hash \
+  --token $token kube.lan:6443
+
+*** Promote to master role:
+
+kubectl taint node $node node-role.kubernetes.io/master=:NoSchedule
+kubectl label node $node node-role.kubernetes.io/master=
+
+*** Secure/expose etcd
+
+Set up CA cert, and signed server+peer certs for (at least) existing
+and new etcd node, and client certs for apiserver.
+NB: existing (kubeadm) server will have etcd name "default".
+
+On existing (kubeadm) master:
+
+docker run --net=host --rm -e ETCDCTL_API=3 -ti \
+  gcr.io/google_containers/etcd-arm:3.0.17 /bin/sh
+etcdctl member list
+etcd member update $memberID https://$ip:2380
+
+Install certs and modify /etc/kubernetes/manifests/etcd.yaml to add:
+    env:
+    - name: POD_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.hostIP
+    command:
+    - --advertise-client-urls=https://$(POD_IP):2379
+    - --listen-client-urls=http://127.0.0.1:2379,https://$(POD_IP):2379
+    - --cert-file=/keys/etcd-kmaster1-server.pem
+    - --key-file=/keys/etcd-kmaster1-server-key.pem
+    - --peer-cert-file=/keys/etcd-kmaster1-peer.pem
+    - --peer-key-file=/keys/etcd-kmaster1-peer-key.pem
+    - --peer-client-cert-auth
+    - --peer-trusted-ca-file=/keys/etcd-ca-peer.pem
+    - --listen-peer-urls=https://$(POD_IP):2380
+    volumeMounts:
+    - mountPath: /keys
+      name: keys
+  volumes:
+  - hostPath:
+      path: /etc/kubernetes/pki
+      type: Directory
+    name: keys
+
+*** Run etcd on new node
+
+Copy etcd TLS keys into /etc/kubernetes/pki/
+
+Copy manifests/etcd.yaml to new node, modify ETCD_NAME and key paths.
+(will crashloop until next step)
+
+On existing master:
+docker run --net=host -e ETCDCTL_API=3 --rm -ti \
+  gcr.io/google_containers/etcd-arm:3.0.17 \
+  etcdctl member add kmaster2 --peer-urls=https://192.168.0.140:2380
+
+On new (empty) additional master:
+
+Copy /etc/kubernetes/pki/ca.key over to new machine(s)
+
+ETCD_NAME=kmaster3; POD_IP=192.168.0.128; docker run --rm --net=host -v /var/lib/etcd:/var/lib/etcd -v /etc/kubernetes/pki:/keys gcr.io/google_containers/etcd-arm:3.0.17 etcd --advertise-client-urls=https://${POD_IP}:2379 --data-dir=/var/lib/etcd --listen-client-urls=http://127.0.0.1:2379,https://${POD_IP}:2379 --initial-cluster=default=https://192.168.0.9:2380,${ETCD_NAME}=https://${POD_IP}:2380 --initial-advertise-peer-urls=https://${POD_IP}:2380 --initial-cluster-state=existing --cert-file=/keys/etcd-${ETCD_NAME}-server.pem --key-file=/keys/etcd-${ETCD_NAME}-server-key.pem --peer-cert-file=/keys/etcd-${ETCD_NAME}-peer.pem --peer-key-file=/keys/etcd-${ETCD_NAME}-peer-key.pem --peer-client-cert-auth --peer-trusted-ca-file=/keys/etcd-ca.pem --listen-peer-urls=https://${POD_IP}:2380 --client-cert-auth --trusted-ca-file=/keys/etcd-ca.pem --election-timeout=10000 --heartbeat-interval=1000
