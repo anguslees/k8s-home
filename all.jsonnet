@@ -43,4 +43,5 @@
     http_proxy: $.webcache.svc,
   },
   gitlab_runner: import "gitlab-runner.jsonnet",
+  openhab: import "openhab.jsonnet",
 }
