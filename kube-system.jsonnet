@@ -1,5 +1,6 @@
 local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
+local utils = import "utils.libsonnet";
 
 {
   namespace:: {
@@ -20,7 +21,7 @@ local kubecfg = import "kubecfg.libsonnet";
     },
 
     spec+: {
-      template+: {
+      template+: utils.CriticalPodSpec {
         spec+: {
 	  nodeSelector: {
 	    "beta.kubernetes.io/arch": this.arch,
@@ -41,10 +42,6 @@ local kubecfg = import "kubecfg.libsonnet";
               key: "node.cloudprovider.kubernetes.io/uninitialized",
               value: "true",
             },
-            {
-              key: "CriticalAddonsOnly",
-              operator: "Exists",
-            },
           ],
           volumes_+: {
             kube_proxy:{
@@ -54,10 +51,11 @@ local kubecfg = import "kubecfg.libsonnet";
               },
             },
             xtables_lock: kube.HostPathVolume("/run/xtables.lock", "FileOrCreate"),
+            lib_modules: kube.HostPathVolume("/lib/modules"),
           },
           containers_: {
             kube_proxy: kube.Container("kube-proxy") {
-              image: "gcr.io/google_containers/kube-proxy-%s:v1.8.11" % this.arch,
+              image: "gcr.io/google_containers/kube-proxy-%s:v1.8.13" % this.arch,
               command: ["/usr/local/bin/kube-proxy"],
               args_+: {
                 "kubeconfig": "/var/lib/kube-proxy/kubeconfig.conf",
@@ -69,6 +67,7 @@ local kubecfg = import "kubecfg.libsonnet";
               volumeMounts_+: {
                 kube_proxy: {mountPath: "/var/lib/kube-proxy"},
                 xtables_lock: {mountPath: "/run/xtables.lock"},
+                lib_modules: {mountPath: "/lib/modules", readOnly: true},
               },
             },
           },
