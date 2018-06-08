@@ -107,7 +107,7 @@ local version = "2.107.3-alpine";
            ["serverUrl", "https://kubernetes.default"],
            ["skipTlsVerify", std.toString(false)],
            ["namespace", $.namespace.metadata.namespace],
-           ["jenkinsUrl", "https://%s/" % $.ing.host],
+           ["jenkinsUrl", $.masterSvc.http_url],
            ["jenkinsTunnel", $.agentSvc.host_colon_port],
            ["containerCap", std.toString(10)],
            ["retentionTimeout", std.toString(5)],
@@ -139,18 +139,19 @@ local version = "2.107.3-alpine";
          ["nodeProperties"],
          ["globalNodeProperties",
           ["hudson.slaves.EnvironmentVariablesNodeProperty",
+           local env = {
+             http_proxy: $.http_proxy.http_url,
+             no_proxy: ".lan,.local,.cluster,.svc",
+           };
            ["envVars", {serialization: "custom"},
             ["unserializable-parents"],
             ["tree-map",
              ["default",
               ["comparator", {class: "hudson.util.CaseInsensitiveComparator"}],
              ],
-             ["int", std.toString(2)],
-             ["string", "http_proxy"],
-             ["string", $.http_proxy.http_url],
-             ["string", "no_proxy"],
-             ["string", ".lan,.local,.cluster,.svc"],
-            ],
+             ["int", std.toString(std.length(env))],
+            ] + std.flattenArrays([
+              [["string", kv[0]], ["string", kv[1]]] for kv in kube.objectItems(env)]),
            ],
           ],
          ],
@@ -221,6 +222,20 @@ local version = "2.107.3-alpine";
           port: 80,
           name: "http",
           targetPort: "http",
+        },
+      ],
+    },
+  },
+
+  masterSsh: kube.Service("jenkins-ssh") + $.namespace {
+    target_pod: $.master.spec.template,
+    spec+: {
+      type: "LoadBalancer",
+      ports: [
+        {
+          port: 50022,
+          name: "ssh",
+          targetPort: "ssh",
         },
       ],
     },
@@ -308,7 +323,7 @@ local version = "2.107.3-alpine";
           annotations+: {
             "prometheus.io/scrape": "true",
             "prometheus.io/port": "8080",
-            "prometheus.io/part": "/prometheus",
+            "prometheus.io/path": "/prometheus",
           },
         },
         spec+: {
@@ -374,6 +389,7 @@ local version = "2.107.3-alpine";
               ports_+: {
                 http: {containerPort: 8080},
                 agent: {containerPort: 50000},
+                ssh: {containerPort: 50022}, // disabled by default
               },
               readinessProbe: {
                 httpGet: {path: "/login", port: "http"},
@@ -381,7 +397,7 @@ local version = "2.107.3-alpine";
                 periodSeconds: 30,
               },
               livenessProbe: self.readinessProbe {
-                initialDelaySeconds: 300,  // Java :(
+                initialDelaySeconds: 10*60,  // Java :(
               },
               resources: {
                 limits: {cpu: "1", memory: "1Gi"},
@@ -397,6 +413,26 @@ local version = "2.107.3-alpine";
             },
           },
         },
+      },
+    },
+  },
+
+  // These are specially for my containos (openembedded) builds, and
+  // almost certainly not generally useful...
+  oebuild: {
+    dldir: kube.PersistentVolumeClaim("oe-dl-dir") + $.namespace {
+      storageClass: "managed-nfs-storage",
+      storage: "20Gi",
+      spec+: {
+        accessModes: ["ReadWriteMany"],
+      },
+    },
+
+    sstate: kube.PersistentVolumeClaim("oe-sstate-dir") + $.namespace {
+      storageClass: "managed-nfs-storage",
+      storage: "200Gi",
+      spec+: {
+        accessModes: ["ReadWriteMany"],
       },
     },
   },
