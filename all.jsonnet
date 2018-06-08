@@ -42,4 +42,5 @@
   jenkins: (import "jenkins.jsonnet") {
     http_proxy: $.webcache.svc,
   },
+  gitlab_runner: import "gitlab-runner.jsonnet",
 }
