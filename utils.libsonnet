@@ -11,6 +11,22 @@ local kube = import "kube.libsonnet";
     }],
   },
 
+  CriticalPodSpec:: {
+    // https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/
+    // NB: replaced with "priorities" in k8s >=1.10
+    metadata+: {
+      annotations+: {
+        "scheduler.alpha.kubernetes.io/critical-pod": "",
+      },
+    },
+    spec+: {
+      tolerations+: [{
+        key: "CriticalAddonsOnly",
+        operator: "Exists",
+      }],
+    },
+  },
+
   HashedSecret(name):: kube.Secret(name) {
     local this = self,
     metadata+: {
@@ -163,5 +179,26 @@ local kube = import "kube.libsonnet";
     },
 
     spec+: {data: error "(sealed) data required"},
+  },
+
+  Certificate(name):: kube._Object("certmanager.k8s.io/v1alpha1", "Certificate", name) {
+    local this = self,
+    host:: error "host is required",
+
+    spec: {
+      secretName: this.metadata.name,
+      issuerRef: {
+        name: "letsencrypt-prod",
+        kind: "ClusterIssuer",
+      },
+      commonName: this.host,
+      dnsNames: [this.host],
+      acme: {
+        config: [{
+          http01: {},
+          domains: this.spec.dnsNames,
+        }],
+      },
+    },
   },
 }
