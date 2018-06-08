@@ -6,7 +6,7 @@ local stripLeading(c, str) = if std.startsWith(str, c) then
 
 local isalpha(c) = std.codepoint(c) >= std.codepoint("a") && std.codepoint(c) <= std.codepoint("z");
 
-local version = "v0.3.1";
+local version = "v0.6.0";
 
 local arch = "amd64";
 
@@ -30,8 +30,18 @@ local archNodeSelector(a) = {nodeSelector+: {"beta.kubernetes.io/arch": a}};
       },
       {
         apiGroups: [""],
+        resources: ["configmaps"],
+        verbs: ["create", "get", "update", "list", "watch"],
+      },
+      {
+        apiGroups: [""],
+        resources: ["events"],
+        verbs: ["create", "watch"],
+      },
+      {
+        apiGroups: [""],
         resources: ["pods"],
-        verbs: ["list"],
+        verbs: ["get", "list", "delete"],
       },
       {
         apiGroups: ["extensions", "apps"],
@@ -44,32 +54,6 @@ local archNodeSelector(a) = {nodeSelector+: {"beta.kubernetes.io/arch": a}};
   updater_binding: kube.ClusterRoleBinding("update-agent") {
     subjects_: [$.serviceAccount],
     roleRef_: $.updater_role,
-  },
-
-  updater_lock_role: kube.Role("update-agent-locker") + $.namespace {
-    rules: [
-      {
-        apiGroups: [""],
-        resources: ["endpoints"],
-        resourceNames: ["container-linux-update-operator-lock"],
-        verbs: ["get", "update"],
-      },
-      {
-        apiGroups: [""],
-        resources: ["endpoints"],
-        verbs: ["create"],
-      },
-      {
-        apiGroups: [""],
-        resources: ["events"],
-        verbs: ["create"],
-      },
-    ],
-  },
-
-  update_lock_binding: kube.RoleBinding("update-agent-lock") + $.namespace {
-    subjects_: [$.serviceAccount],
-    roleRef_: $.updater_lock_role,
   },
 
   update_agent: kube.DaemonSet("update-agent") + $.namespace {
