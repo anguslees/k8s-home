@@ -34,8 +34,18 @@ local utils = import "utils.libsonnet";
     rules: [
       {
         apiGroups: [""],
-        resources: ["pods", "pods/attach"],
-        verbs: ["create", "list"],
+        resources: ["pods", "secrets"],
+        verbs: ["create", "delete", "get", "list", "patch", "update", "watch"],
+      },
+      {
+        apiGroups: [""],
+        resources: ["pods/attach", "pods/exec"],
+        verbs: ["create"],
+      },
+      {
+        apiGroups: [""],
+        resources: ["pods/log"],
+        verbs: ["get", "list", "watch"],
       },
     ],
   },
