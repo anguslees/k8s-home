@@ -11,7 +11,7 @@
 
   metallb: import "metallb.jsonnet",
   nginx_ingress: import "nginx-ingress.jsonnet",
-  kube_lego: import "kube-lego.jsonnet",
+  cert_manager: import "cert-manager.jsonnet",
   dyndns: import "dyndns.jsonnet",
 
   coreos_pxe_install: import "coreos-pxe-install.jsonnet",
