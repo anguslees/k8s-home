@@ -36,6 +36,7 @@
   },
 
   webcache: import "webcache.jsonnet",
+  mail: import "mail.jsonnet",
   ghomekodi: import "ghomekodi.jsonnet",
   cloudprint: import "cloudprint.jsonnet",
   echoheaders: import "echoheaders.jsonnet",
