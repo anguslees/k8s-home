@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local utils = import "utils.libsonnet";
 
 // aka lts-alpine
-local version = "2.121.1-alpine";
+local version = "2.121.2-alpine";
 
 {
   namespace:: {metadata+: {namespace: "jenkins"}},
@@ -13,12 +13,12 @@ local version = "2.121.1-alpine";
 
   // List of plugins to be install during Jenkins master start
   plugins:: {
-    kubernetes: "1.4",
-    prometheus: "1.1.1",
+    kubernetes: "1.10.1",
+    prometheus: "1.2.2",
     "workflow-aggregator": "2.5",
-    "workflow-job": "2.15",
-    "credentials-binding": "1.13",
-    git: "3.6.4",
+    "workflow-job": "2.23",
+    "credentials-binding": "1.16",
+    git: "3.9.1",
   },
 
   logging:: {
