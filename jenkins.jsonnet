@@ -416,24 +416,4 @@ local version = "2.121.1-alpine";
       },
     },
   },
-
-  // These are specially for my containos (openembedded) builds, and
-  // almost certainly not generally useful...
-  oebuild: {
-    dldir: kube.PersistentVolumeClaim("oe-dl-dir") + $.namespace {
-      storageClass: "managed-nfs-storage",
-      storage: "20Gi",
-      spec+: {
-        accessModes: ["ReadWriteMany"],
-      },
-    },
-
-    sstate: kube.PersistentVolumeClaim("oe-sstate-dir") + $.namespace {
-      storageClass: "managed-nfs-storage",
-      storage: "200Gi",
-      spec+: {
-        accessModes: ["ReadWriteMany"],
-      },
-    },
-  },
 }
