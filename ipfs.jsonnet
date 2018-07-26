@@ -65,19 +65,17 @@ local kubecfg = import "kubecfg.libsonnet";
             config: kube.Container("config") {
               image: this.spec.template.spec.containers_.ipfs.image,
               command: ["sh", "-e", "-x", "-c", self.shcmd],
-              shcmd:: std.join("; ", [
-                "test -e /data/ipfs/config || ipfs init --bits 4096 --empty-repo",
-                ] + [
-                  "ipfs config %s -- %s %s" % [
-                    if std.type(kv[1]) != "string" then "--json" else "",
-                    std.escapeStringBash(kv[0]),
-                    std.escapeStringBash(std.toString(kv[1]))]
-                  for kv in kube.objectItems(self.opts)] + [
-                    // FIXME: this is probably better handled with the
-                    // correct podSecurity setup...
-                    "test $(id -u) -ne 0 || chown -R ipfs /data/ipfs",
-                  ]),
+              shcmd:: std.join("\n", [
+                "test ! -e /data/ipfs/config || exit 0",
+                "ipfs init --bits 4096 --empty-repo --profile server",
+              ] + [
+                "ipfs config %s -- %s %s" % [
+                  if std.type(kv[1]) != "string" then "--json" else "",
+                  std.escapeStringBash(kv[0]),
+                  std.escapeStringBash(std.toString(kv[1]))]
+                for kv in kube.objectItems(self.opts)]),
               opts:: {
+                // FIXME: This is all only set on initial `init`.
                 // Warning: API has no auth/authz!
                 "Addresses.API": "/ip4/0.0.0.0/tcp/5001",
                 "Addresses.Gateway": "/ip4/0.0.0.0/tcp/8080",
@@ -115,7 +113,7 @@ local kubecfg = import "kubecfg.libsonnet";
           },
 	  containers_+: {
 	    ipfs: kube.Container("ipfs") {
-	      image: "ipfs/go-ipfs:v0.4.14",
+	      image: "ipfs/go-ipfs:v0.4.16",
 	      env_+: {
 		//IPFS_LOGGING: "debug",
                 IPFS_PATH: "/data/ipfs",
