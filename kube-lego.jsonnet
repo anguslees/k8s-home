@@ -57,7 +57,7 @@ local utils = import "utils.libsonnet";
           nodeSelector+: utils.archSelector("amd64"),
           containers_+: {
             default: kube.Container("kube-lego") {
-              image: "jetstack/kube-lego:0.1.5",
+              image: "jetstack/kube-lego:0.1.7",
               ports_+: {
                 http: {containerPort: 8080},
               },
