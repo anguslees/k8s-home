@@ -113,7 +113,7 @@ local kubecfg = import "kubecfg.libsonnet";
           },
 	  containers_+: {
 	    ipfs: kube.Container("ipfs") {
-	      image: "ipfs/go-ipfs:v0.4.16",
+	      image: "ipfs/go-ipfs:v0.4.17",
 	      env_+: {
 		//IPFS_LOGGING: "debug",
                 IPFS_PATH: "/data/ipfs",
