@@ -123,9 +123,9 @@ NB: existing (kubeadm) server will have etcd name "default".
 On existing (kubeadm) master:
 
 docker run --net=host --rm -e ETCDCTL_API=3 -ti \
-  gcr.io/google_containers/etcd-arm:3.0.17 /bin/sh
+  gcr.io/google_containers/etcd-arm:3.1.10 /bin/sh
 etcdctl member list
-etcd member update $memberID https://$ip:2380
+etcdctl member update $memberID https://$ip:2380
 
 Install certs and modify /etc/kubernetes/manifests/etcd.yaml to add:
     env:
