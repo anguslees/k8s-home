@@ -9,6 +9,13 @@ local kubecfg = import "kubecfg.libsonnet";
 
   ns: kube.Namespace($.namespace.metadata.namespace),
 
+  // Also: there's a webui.  webui is hardcoded to use localhost (see
+  // open issues), so works best with port-forward:
+  //  kubectl -n ipfs port-forward ipfs-0 5001:5001
+  //  sensible-browser http://localhost:5001/webui
+
+  // NB: we run with Gateway.Writable=true, so ensure the
+  // gateway port is not open to the public
   ing: utils.Ingress("gateway") + $.namespace {
     host: "ipfs.k.lan",
     target_svc: $.svc,
@@ -100,7 +107,7 @@ local kubecfg = import "kubecfg.libsonnet";
                 ],
                 "Datastore.StorageMax": this.spec.volumeClaimTemplates_.data.storage,
                 "Discovery.MDNS.Enabled": false, // alas :(
-                "Gateway.Writable": false,
+                "Gateway.Writable": true,
               },
               env_+: {
 		IPFS_LOGGING: "debug",
