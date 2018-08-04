@@ -16,6 +16,9 @@
 
   coreos_pxe_install: import "coreos-pxe-install.jsonnet",
   coreos_updater: import "coreos-updater.jsonnet",
+  kured: (import "kured.jsonnet") {
+    prometheus_svc: $.prometheus.prometheus.svc,
+  },
 
   nfs: (import "nfs.jsonnet") {
     storageClass+: {

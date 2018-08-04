@@ -64,6 +64,16 @@ local path_join(prefix, suffix) = (
                 description: "{{$labels.namespace}}/{{$labels.container}} is restarting {{$value}} times per hour",
               },
             },
+            {
+              alert: "RebootRequired",
+              expr: "kured_reboot_required != 0",
+              "for": "24h",
+              labels: {severity: "warning"},
+              annotations: {
+                summary: "Machines require being rebooted, and reboot daemon has failed to do so for 24h",
+                description: "Machine(s) require being rebooted.",
+              },
+            },
           ],
         },
       ],
