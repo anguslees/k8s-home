@@ -221,8 +221,10 @@ local path_join(prefix, suffix) = (
                   // Crash recovery can take a _long_ time (many
                   // minutes), depending on the time since last
                   // successful compaction.
-                  initialDelaySeconds: 20 * 60,  // I have seen >10mins
+                  initialDelaySeconds: 45 * 60,  // I have seen >>10mins
                   successThreshold: 1,
+                  timeoutSeconds: 10,
+                  failureThreshold: 5,
                 },
                 readinessProbe: {
                   httpGet: {path: "/", port: this.ports[0].name},
@@ -314,7 +316,7 @@ local path_join(prefix, suffix) = (
                 },
                 readinessProbe+: self.livenessProbe {
                   initialDelaySeconds: 3,
-                  timeoutSeconds: 3,
+                  timeoutSeconds: 10,
                   periodSeconds: 3,
                 },
               },
