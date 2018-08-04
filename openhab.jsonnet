@@ -93,7 +93,7 @@ local utils = import "utils.libsonnet";
     sitemaps: utils.HashedConfigMap("openhab-sitemaps") + $.namespace {
       data+: {
         "senseme.sitemap": |||
-          sitemap demo label="LoungeFan" {
+          sitemap senseme label="LoungeFan" {
             Frame label="Control Lounge Fan" {
               Switch item=LoungeFanPower label="Fan Power [%s]"
               Slider item=LoungeFanSpeed label="Fan Speed [%s %%]"
@@ -101,7 +101,7 @@ local utils = import "utils.libsonnet";
           }
         |||,
         "kodi.sitemap": |||
-          sitemap demo label="myKodi" {
+          sitemap kodi label="myKodi" {
             Frame label="Kodi" {
               Switch    item=myKodi_mute
               Slider    item=myKodi_volume
