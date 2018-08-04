@@ -26,6 +26,7 @@ local NODE_NAME = "__meta_kubernetes_node_name";
     alertmanagers: [{
       static_configs: [{targets: ["alertmanager:9093"]}]
     }],
+    path_prefix: "/alertmanager",
   },
 
   rule_files: [],
