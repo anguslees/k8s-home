@@ -49,4 +49,8 @@
   jenkins_containos: import "jenkins-containos.jsonnet",
   gitlab_runner: import "gitlab-runner.jsonnet",
   openhab: import "openhab.jsonnet",
+  mycroft: (import "mycroft.jsonnet") {
+    http_proxy: $.webcache.svc,
+    openhab: $.openhab.svc,
+  },
 }
