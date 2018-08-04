@@ -65,14 +65,8 @@ local cniplugins_version = "v0.6.0";
       template+: utils.CriticalPodSpec {
 	spec+: {
 	  hostNetwork: true,
-	  nodeSelector: {
-	    "beta.kubernetes.io/arch": this.arch,
-	  },
-	  tolerations+: [{
-	    key: "node-role.kubernetes.io/master",
-	    operator: "Exists",
-	    effect: "NoSchedule",
-	  }],
+	  nodeSelector+: utils.archSelector(this.arch),
+	  tolerations+: utils.toleratesMaster,
 
 	  serviceAccountName: $.serviceAccount.metadata.name,
 

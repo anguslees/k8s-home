@@ -3,13 +3,11 @@ local kube = import "kube.libsonnet";
 {
   archSelector(arch):: {"beta.kubernetes.io/arch": arch},
 
-  toleratesMaster:: {
-    tolerations+: [{
-      key: "node-role.kubernetes.io/master",
-      operator: "Exists",
-      effect: "NoSchedule",
-    }],
-  },
+  toleratesMaster:: [{
+    key: "node-role.kubernetes.io/master",
+    operator: "Exists",
+    effect: "NoSchedule",
+  }],
 
   CriticalPodSpec:: {
     // https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/

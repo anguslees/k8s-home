@@ -11,7 +11,8 @@ local default_env = {
 
 local arch = "arm";
 
-local pxeNodeSelector = utils.toleratesMaster {
+local pxeNodeSelector = {
+  tolerations+: utils.toleratesMaster,
   nodeSelector+: utils.archSelector(arch),
 };
 
@@ -258,7 +259,8 @@ local sshKeys = [
   httpd: kube.Deployment("coreos-pxe-httpd") + $.namespace {
     spec+: {
       template+: {
-        spec+: utils.toleratesMaster {
+        spec+: {
+          tolerations+: utils.toleratesMaster,
           containers_+: {
             httpd: kube.Container("httpd") {
               image: "httpd:2.4.33-alpine",

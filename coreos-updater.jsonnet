@@ -1,5 +1,6 @@
 local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
+local utils = import "utils.libsonnet";
 
 local stripLeading(c, str) = if std.startsWith(str, c) then
   stripLeading(c, std.substr(str, 1, std.length(str)-1)) else str;
@@ -77,13 +78,7 @@ local archNodeSelector(a) = {nodeSelector+: {"beta.kubernetes.io/arch": a}};
               },
             },
           },
-          tolerations+: [
-            {
-              key: "node-role.kubernetes.io/master",
-              operator: "Exists",
-              effect: "NoSchedule",
-            },
-          ],
+          tolerations+: utils.toleratesMaster,
           volumes+: [kube.HostPathVolume(p) {name: name(p)}
                      for p in hostPaths],
         },
@@ -105,13 +100,7 @@ local archNodeSelector(a) = {nodeSelector+: {"beta.kubernetes.io/arch": a}};
               },
             },
           },
-          tolerations+: [
-            {
-              key: "node-role.kubernetes.io/master",
-              operator: "Exists",
-              effect: "NoSchedule",
-            },
-          ],
+          tolerations+: utils.toleratesMaster,
         },
       },
     },

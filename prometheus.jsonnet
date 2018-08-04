@@ -352,10 +352,7 @@ local path_join(prefix, suffix) = (
               procfs: kube.HostPathVolume("/proc"),
               sysfs: kube.HostPathVolume("/sys"),
             },
-            tolerations: [{
-              effect: "NoSchedule",
-              key: "node-role.kubernetes.io/master",
-            }],
+            tolerations: utils.toleratesMaster,
             containers_+: {
               default: kube.Container("node-exporter") {
                 image: "prom/node-exporter:v0.15.2",  // fixme: +this.arch

@@ -32,17 +32,12 @@ local utils = import "utils.libsonnet";
           schedulerName: "default-scheduler",
           serviceAccount: "kube-proxy",
           serviceAccountName: self.serviceAccount,
-          tolerations: [
-            {
-              effect: "NoSchedule",
-              key: "node-role.kubernetes.io/master",
-            },
-            {
-              effect: "NoSchedule",
-              key: "node.cloudprovider.kubernetes.io/uninitialized",
-              value: "true",
-            },
-          ],
+          tolerations: utils.toleratesMaster +
+          [{
+            effect: "NoSchedule",
+            key: "node.cloudprovider.kubernetes.io/uninitialized",
+            value: "true",
+          }],
           volumes_+: {
             kube_proxy:{
               configMap: {
