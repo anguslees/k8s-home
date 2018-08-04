@@ -361,15 +361,13 @@ local version = "2.121.2-alpine";
             jenkins: kube.Container("jenkins") {
               local container = self,
               image: "jenkins/jenkins:" + version,
-              args_+: {
-              },
               env_+: {
                 JAVA_OPTS: std.join(" ", [
                   //"-XX:+UnlockExperimentalVMOptions",
                   //"-XX:+UseCGroupMemoryLimitForHeap",
                   //"-XX:MaxRAMFraction=1",
-                  "-Xmx%dm" % (kube.siToNum(container.resources.limits.memory) /
-                               std.pow(2, 20) - 100),
+                  "-Xmx%dm" % (kube.siToNum(container.resources.requests.memory) /
+                      std.pow(2, 20)),
                   "-XshowSettings:vm",
                   "-Dhudson.slaves.NodeProvisioner.initialDelay=0",
                   "-Dhudson.slaves.NodeProvisioner.MARGIN=50",
@@ -393,11 +391,14 @@ local version = "2.121.2-alpine";
               },
               readinessProbe: {
                 httpGet: {path: "/login", port: "http"},
-                timeoutSeconds: 5,
+                timeoutSeconds: 10,
                 periodSeconds: 30,
               },
               livenessProbe: self.readinessProbe {
-                initialDelaySeconds: 10*60,  // Java :(
+                initialDelaySeconds: 20*60,  // Java :(
+                timeoutSeconds: 30,
+                failureThreshold: 10,
+                periodSeconds: 60,
               },
               resources: {
                 limits: {cpu: "1", memory: "1Gi"},
