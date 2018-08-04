@@ -27,7 +27,6 @@ local utils = import "utils.libsonnet";
           'String LoungeFanSmartmode "Fan Smart mode" { channel="bigassfan:fan:20F85EDA6F34:fan-smartmode" }',
           'Dimmer LoungeFanSpeedMin "Fan Speed min" { channel="bigassfan:fan:20F85EDA6F34:fan-learn-minspeed" }',
           'Dimmer LoungeFanSpeedMax "Fan Speed max" { channel="bigassfan:fan:20F85EDA6F34:fan-learn-maxspeed" }',
-          'String LoungeFanLightPresent { channel="bigassfan:fan:20F85EDA6F34:light-present" }',
           'Switch LoungeFanMotionSensor "Fan Motion sensor" { channel="bigassfan:fan:20F85EDA6F34:motion" }',
           'DateTime LoungeFanTime "Fan Time" { channel="bigassfan:fan:20F85EDA6F34:time" }',
         ]),
@@ -116,7 +115,7 @@ local utils = import "utils.libsonnet";
               Selection item=myKodi_pvropenchannel
               Text      item=myKodi_pvrchannel
               Selection item=myKodi_input mappings=[Up='Up', Down='Down', Left='Left', Right='Right', Select='Select', Back='Back', Home='Home', ContextMenu='ContextMenu', Info='Info']
-              Selection item=myKodi_systemcommand mappings=[Shutdown='Herunterfahren', Suspend='Bereitschaft', Reboot='Neustart']
+              Selection item=myKodi_systemcommand mappings=[Shutdown='Shutdown', Suspend='Suspend', Reboot='Reboot']
               Text      item=myKodi_mediatype
               Image     item=myKodi_thumbnail
               Image     item=myKodi_fanart
@@ -129,7 +128,7 @@ local utils = import "utils.libsonnet";
     things: utils.HashedConfigMap("openhab-things") + $.namespace {
       data+: {
         "senseme.things": |||
-          bigassfan:fan:20F85EDA6F34 [label="Lounge Fan", ipAddress="192.168.0.100", macAddress="20:F8:5E:DA:6F:34"]
+          bigassfan:fan:20F85EDA6F34 [label="Lounge Fan", ipAddress="192.168.0.197", macAddress="20:F8:5E:DA:6F:34"]
         |||,
         "kodi.things": |||
           Thing kodi:kodi:myKodi "Kodi" @ "Living Room" [ipAddress="tellymonster.lan", port=9090] {
@@ -145,13 +144,16 @@ local utils = import "utils.libsonnet";
     services: utils.HashedConfigMap("openhab-services") + $.namespace {
       data+: {
         "runtime.cfg": std.join("\n", [
-          "discovery.bigassfan:background=false",
+          "discovery.bigassfan:background=true",
           "binding.chromecast:callbackUrl=http://%s/" % $.ing.host,
         ]),
         // NB: Only honoured on first start
         addons_:: {
           package: "standard",
-          binding_:: ["bigassfan", "kodi", "chromecast"],
+          binding_:: ["bigassfan", "kodi", "chromecast",
+            // aka Xiaomi Mi IO Binding
+            "market:binding-3499123",
+          ],
           binding: std.join(",", self.binding_),
           ui_:: ["basic", "paper"],
           ui: std.join(",", self.ui_),
@@ -227,7 +229,8 @@ local utils = import "utils.libsonnet";
           },
           containers_+: {
             openhab: kube.Container("openhab") {
-              image: "openhab/openhab:2.2.0-amd64-alpine",
+              local container = self,
+              image: "openhab/openhab:2.3.0-amd64-alpine",
               command: ["/entrypoint.sh", "su-exec", "openhab", "./start.sh", "run"],
               tty: true,  // Required for odd kafka console thing
               stdin: true,
@@ -240,9 +243,18 @@ local utils = import "utils.libsonnet";
                 lsp: {containerPort: 5007},
               },
               env_+: {
+                JAVA_OPTS: std.join(" ", [
+                  "-XshowSettings:vm",
+                  "-Xmx%dm" % (kube.siToNum(container.resources.requests.memory) /
+                      std.pow(2, 20)),
+                ]),
                 CRYPTO_POLICY: "unlimited",
                 LANGUAGE: "en_AU.UTF-8",
                 LANG: self.LANGUAGE,
+              },
+              resources: {
+                requests: {cpu: "10m", memory: "500Mi"},
+                limits: {cpu: "1000m", memory: "600Mi"},
               },
               volumeMounts_+: {
                 //usbacm: {mountPath: "/dev/ttyACM0"},
@@ -253,11 +265,19 @@ local utils = import "utils.libsonnet";
               },
               readinessProbe: {
                 httpGet: {path: "/", port: "http"},
-                timeoutSeconds: 5,
+                timeoutSeconds: 10,
                 periodSeconds: 30,
               },
               livenessProbe: self.readinessProbe {
-                initialDelaySeconds: 10*60, // Loong startup (entrypoint, Java, etc)
+                // After a version update, openhab needs to download
+                // all the updated modules before it will start acking
+                // health checks.  Last time I tried, this took ~2h (!)
+                // TODO: Rewrite all of the openhab setup to move
+                // that into an init container.
+                initialDelaySeconds: 4 * 60 * 60,  // 4h
+                timeoutSeconds: 30,
+                failureThreshold: 10,
+                periodSeconds: 60,
               },
             },
           },
