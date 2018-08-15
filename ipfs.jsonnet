@@ -43,6 +43,27 @@ local kubecfg = import "kubecfg.libsonnet";
     },
   },
 
+  // To publish content to ipfs efficiently, your firewall should
+  // port-forward 4001/tcp and 4002/udp to these IPs.
+  swarmSvc: kube.Service("swarm") + $.namespace {
+    target_pod: $.ipfs.spec.template,
+    spec+: {
+      type: "LoadBalancer",
+      ports: [
+        {name: "swarm", port: 4001, protocol: "TCP"},
+      ],
+    },
+  },
+  swarmuSvc: kube.Service("swarmu") + $.namespace {
+    target_pod: $.ipfs.spec.template,
+    spec+: {
+      type: "LoadBalancer",
+      ports: [
+        {name: "swarmu", port: 4002, protocol: "UDP"},
+      ],
+    },
+  },
+
   ipfs: kube.StatefulSet("ipfs") + $.namespace {
     local this = self,
     spec+: {
