@@ -63,6 +63,10 @@ local image = "mycroftai/docker-mycroft:latest"; // FIXME: a release?
           containers_+: {
             mycroft: kube.Container("mycroft") {
               image: image,
+              command: ["/bin/bash", "-c",
+                // Hacky workaround for MycroftAI/mycroft-core#1730
+                "rm /.dockerenv; exec /opt/mycroft/startup.sh",
+              ],
               ports_+: {
                 mycroft: {containerPort: 8181},
               },
