@@ -38,6 +38,9 @@
     ipfsSvc: $.ipfs.svc,
   },
 
+  rook_ceph_system: import "rook-ceph-system.jsonnet",
+  rook_ceph: import "rook-ceph.jsonnet",
+
   webcache: import "webcache.jsonnet",
   mail: import "mail.jsonnet",
   ghomekodi: import "ghomekodi.jsonnet",
