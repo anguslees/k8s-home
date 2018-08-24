@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local coreos_kubelet_tag = "v1.8.11_coreos.0";
+local coreos_kubelet_tag = "v1.8.14_coreos.0";
 
 local default_env = {
   http_proxy: "http://192.168.0.10:3128/",
@@ -167,6 +167,7 @@ local sshKeys = [
                   "/etc/kubernetes/checkpoint-secrets",
                   "/etc/kubernetes/inactive-manifests",
                   "/var/lib/cni",
+                  "/var/lib/kubelet/volumeplugins",
                 ]),
                 // ExecStartPre=/usr/bin/bash -c "grep 'certificate-authority-data' /etc/kubernetes/kubeconfig | awk '{print $2}' | base64 -d > /etc/kubernetes/ca.crt"
                 // ExecStartPre=-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid
@@ -194,6 +195,7 @@ local sshKeys = [
                   "bootstrap-kubeconfig": "/etc/kubernetes/bootstrap-kubelet.conf",
                   "require-kubeconfig": true,
                   "cadvisor-port": 0,
+                  "volume-plugin-dir": "/var/lib/kubelet/volumeplugins",
                 },
                 ExecStop: "-/usr/bin/rkt stop --uuid-file=/var/cache/kubelet-pod.uuid",
                 Restart: "always",
