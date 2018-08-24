@@ -13,6 +13,7 @@ local jenkins = import "jenkins.jsonnet";
     storageClass: "managed-nfs-storage",
     storage: "20Gi",
     spec+: {
+      storageClassName: null, // avoid changing the current default.  FIXME: recreate at some point.
       accessModes: ["ReadWriteMany"],
     },
   },
@@ -21,6 +22,7 @@ local jenkins = import "jenkins.jsonnet";
     storageClass: "managed-nfs-storage",
     storage: "200Gi",
     spec+: {
+      storageClassName: null, // avoid changing the current default.  FIXME: recreate at some point.
       accessModes: ["ReadWriteMany"],
     },
   },
