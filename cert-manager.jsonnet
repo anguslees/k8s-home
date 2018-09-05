@@ -72,7 +72,7 @@ local email = "guslees+lego@gmail.com";
           serviceAccountName: $.sa.metadata.name,
           containers_+: {
             default: kube.Container("cert-manager") {
-              image: "quay.io/jetstack/cert-manager-controller:v0.3.2",
+              image: "quay.io/jetstack/cert-manager-controller:v0.4.1",
               args_+: {
                 "cluster-resource-namespace": "$(POD_NAMESPACE)",
                 "leader-election-namespace": "$(POD_NAMESPACE)",
