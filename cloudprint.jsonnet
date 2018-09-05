@@ -45,7 +45,7 @@ local cups_server = "mongrel";
           nodeSelector+: utils.archSelector("amd64"),
           containers_+: {
             default: kube.Container("gcp-connector") {
-              image: "tianon/google-cloud-print-connector:1.13",
+              image: "tianon/google-cloud-print-connector:1.16",
               command: ["gcp-cups-connector"],
               args_+: {
                 "log-to-console": true,
