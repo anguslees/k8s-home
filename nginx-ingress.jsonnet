@@ -177,22 +177,28 @@ local vips = import "keepalived.jsonnet";
           terminationGracePeriodSeconds: 60,
           containers_+: {
             default: kube.Container("nginx") {
-              image: "quay.io/kubernetes-ingress-controller/nginx-ingress-controller:0.11.0",
+              image: "quay.io/kubernetes-ingress-controller/nginx-ingress-controller:0.19.0",
               env_+: {
                 POD_NAME: kube.FieldRef("metadata.name"),
                 POD_NAMESPACE: kube.FieldRef("metadata.namespace"),
               },
               command: ["/nginx-ingress-controller"],
               args_+: {
-                "default-backend-service": "$(POD_NAMESPACE)/" + $.defaultSvc.metadata.name,
-                configmap: "$(POD_NAMESPACE)/" + $.config.metadata.name,
+                local fqname(o) = "%s/%s" % [o.metadata.namespace, o.metadata.name],
+                "default-backend-service": fqname($.defaultSvc),
+                configmap: fqname($.config),
                 // publish-service requires svc to have .Status.LoadBalancer.Ingress
-                "publish-service": "$(POD_NAMESPACE)/" + $.service.metadata.name,
+                "publish-service": fqname($.service),
 
-                "tcp-services-configmap": "$(POD_NAMESPACE)/" + $.tcpconf.metadata.name,
-                "udp-services-configmap": "$(POD_NAMESPACE)/" + $.udpconf.metadata.name,
+                "tcp-services-configmap": fqname($.tcpconf),
+                "udp-services-configmap": fqname($.udpconf),
 
+                "annotations-prefix": "nginx.ingress.kubernetes.io",
                 "sort-backends": true,
+              },
+              securityContext: {
+                capabilities: {drop: ["ALL"], add: ["NET_BIND_SERVICE"]},
+                runAsUser: 33, // www-data
               },
               ports_: {
                 http: { containerPort: 80 },
@@ -232,13 +238,15 @@ local vips = import "keepalived.jsonnet";
           containers_+: {
             default+: {
               args_+: {
+                local fqname(o) = "%s/%s" % [o.metadata.namespace, o.metadata.name],
+
                 "ingress-class": "nginx-internal",
 
                 // publish-service requires svc to have .Status.LoadBalancer.Ingress
-                "publish-service": "$(POD_NAMESPACE)/" + $.serviceIntern.metadata.name,
+                "publish-service": fqname($.serviceIntern),
 
-                "tcp-services-configmap": "$(POD_NAMESPACE)/" + $.tcpconfIntern.metadata.name,
-                "udp-services-configmap": "$(POD_NAMESPACE)/" + $.udpconfIntern.metadata.name,
+                "tcp-services-configmap": fqname($.tcpconfIntern),
+                "udp-services-configmap": fqname($.udpconfIntern),
               },
             },
           },
