@@ -14,6 +14,7 @@ local NAMESPACE = "__meta_kubernetes_namespace";
 local SERVICE_NAME = "__meta_kubernetes_service_name";
 local ENDPOINT_PORT_NAME = "__meta_kubernetes_endpoint_port_name";
 local NODE_NAME = "__meta_kubernetes_node_name";
+local POD_LABEL(l) = "__meta_kubernetes_pod_label_" + l;
 
 {
   global: {
@@ -23,16 +24,21 @@ local NODE_NAME = "__meta_kubernetes_node_name";
   },
 
   alerting: {
-    alertmanagers: [{
+    alertmanagers: [k8sScrape("pod") {
       path_prefix: "/alertmanager",
-      kubernetes_sd_configs: [{role: "pod"}],
+      scheme: "http",
       relabel_configs: [
         {
-          local POD_LABEL(l) = "__meta_kubernetes_pod_label_%s" % [l],
-          local CONTAINER_PORT_NAME = "__meta_kubernetes_pod_container_port_name",
-          source_labels: [NAMESPACE, POD_LABEL("name"), CONTAINER_PORT_NAME],
+          source_labels: [NAMESPACE, POD_LABEL("name")],
           action: "keep",
-          regex: "alertmanager;alertmanager;alertmanager",
+          regex: "monitoring;alertmanager",
+        },
+        {
+          source_labels: ["__address__"],
+          action: "replace",
+          target_label: "__address__",
+          regex: "([^:]+)(?::\\d+)?",
+          replacement: "$1:9093",
         },
       ],
     }],
