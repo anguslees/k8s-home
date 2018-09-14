@@ -55,11 +55,11 @@ local kube = import "kube.libsonnet";
 
   Webhook(name, path): $.Ingress(name) + $.IngressTls {
     local this = self,
-    local host = "webhooks.oldmacdonald.farm",
+    host: "webhooks.oldmacdonald.farm",
 
     target_svc:: error "target_svc required",
 
-    url:: "http://%s%s" % [host, path],
+    url:: "http://%s%s" % [this.host, path],
 
     metadata+: {
       annotations+: {
@@ -69,7 +69,7 @@ local kube = import "kube.libsonnet";
     spec+: {
       rules: [
         {
-          host: host,
+          host: this.host,
           http: {
             paths: [
               {path: path, backend: this.target_svc.name_port},
@@ -85,6 +85,8 @@ local kube = import "kube.libsonnet";
     metadata+: {
       annotations+: {
         "kubernetes.io/tls-acme": "true",
+        "kubernetes.io/ingress.class": "nginx",
+        "certmanager.k8s.io/cluster-issuer": "letsencrypt-prod",
       },
     },
     spec+: {
