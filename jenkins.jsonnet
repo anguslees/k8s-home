@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local utils = import "utils.libsonnet";
 
 // aka lts-alpine
-local version = "2.121.3-alpine";
+local version = "2.138.1-alpine";
 
 {
   namespace:: {metadata+: {namespace: "jenkins"}},
@@ -311,8 +311,20 @@ local version = "2.121.3-alpine";
     target_svc: $.masterSvc,
   },
 
+  ingExt: utils.Ingress("jenkins-external") + utils.IngressTls + $.namespace {
+    host: "jenkins.oldmacdonald.farm",
+    target_svc: $.masterSvc,
+  },
+
   pvc: kube.PersistentVolumeClaim("jenkins-data") + $.namespace {
     storage: "10Gi",
+  },
+
+  // Used by/for "External Workspace" plugin.
+  exws: kube.PersistentVolumeClaim("jenkins-external-workspace") + $.namespace {
+    storage: "100Gi",
+    storageClass: "managed-nfs-storage",
+    spec+: {accessModes: ["ReadWriteMany"]},
   },
 
   // FIXME: should be a StatefulSet, but they don't update well :(
@@ -340,6 +352,7 @@ local version = "2.121.3-alpine";
             init: kube.ConfigMapVolume($.initScripts),
             plugins: kube.EmptyDirVolume(),
             secrets: kube.EmptyDirVolume(), // todo
+            exws: kube.PersistentVolumeClaimVolume($.exws),
           },
           initContainers_+: {
             // TODO: The "right" thing to do is to build a custom
@@ -410,6 +423,7 @@ local version = "2.121.3-alpine";
                 init: {mountPath: "/usr/share/jenkins/ref/init.groovy.d", readOnly: true},
                 plugins: {mountPath: "/usr/share/jenkins/ref/plugins", readOnly: true},
                 secrets: {mountPath: "/usr/share/jenkins/ref/secrets", readOnly: true},
+                exws: {mountPath: "/exws", readOnly: false}
               },
             },
           },
