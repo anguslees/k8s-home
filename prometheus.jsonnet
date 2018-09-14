@@ -512,7 +512,7 @@ local path_join(prefix, suffix) = (
             nodeSelector: utils.archSelector("amd64"),
             containers_+: {
               default+: kube.Container("ksm") {
-                image: "quay.io/coreos/kube-state-metrics:v1.1.0",
+                image: "quay.io/coreos/kube-state-metrics:v1.4.0",
                 ports_: {
                   metrics: {containerPort: 8080},
                 },
