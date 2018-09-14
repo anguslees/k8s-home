@@ -396,6 +396,12 @@ local path_join(prefix, suffix) = (
 
       spec+: {
         template+: {
+          metadata+: {
+            annotations+: {
+              "prometheus.io/scrape": "true",
+              "prometheus.io/port": "9100",
+            },
+          },
           spec+: {
             hostNetwork: true,
             hostPID: true,
