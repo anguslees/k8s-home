@@ -25,7 +25,16 @@ local NODE_NAME = "__meta_kubernetes_node_name";
   alerting: {
     alertmanagers: [{
       path_prefix: "/alertmanager",
-      static_configs: [{targets: ["alertmanager:9093"]}]
+      kubernetes_sd_configs: [{role: "pod"}],
+      relabel_configs: [
+        {
+          local POD_LABEL(l) = "__meta_kubernetes_pod_label_%s" % [l],
+          local CONTAINER_PORT_NAME = "__meta_kubernetes_pod_container_port_name",
+          source_labels: [NAMESPACE, POD_LABEL("name"), CONTAINER_PORT_NAME],
+          action: "keep",
+          regex: "alertmanager;alertmanager;alertmanager",
+        },
+      ],
     }],
   },
 

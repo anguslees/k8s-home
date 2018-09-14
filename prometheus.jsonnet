@@ -155,24 +155,27 @@ local path_join(prefix, suffix) = (
       },
     },
 
-    data: kube.PersistentVolumeClaim("prometheus-data") + $.namespace {
-      // https://prometheus.io/docs/prometheus/2.0/storage/#operational-aspects
-      //  On average, Prometheus uses only around 1-2 bytes per
-      //  sample. Thus, to plan the capacity of a Prometheus server,
-      //  you can use the rough formula:
-      //  needed_disk_space = retention_time_seconds * ingested_samples_per_second * bytes_per_sample
-      retention_days:: prom.deploy.spec.template.spec.containers_.default.args_.retention_days,
-      retention_secs:: self.retention_days * 86400,
-      time_series:: 1000, // wild guess
-      samples_per_sec:: self.time_series / $.config.global.scrape_interval_secs,
-      bytes_per_sample:: 2,
-      needed_space:: self.retention_secs * self.samples_per_sec * self.bytes_per_sample,
-      overhead_factor:: 1.5,
-      storage: "%dMi" % [self.overhead_factor * self.needed_space / 1e6],
-    },
-
-    deploy: kube.Deployment("prometheus") + $.namespace {
+    deploy: kube.StatefulSet("prometheus") + $.namespace {
+      local this = self,
       spec+: {
+        replicas: 2,
+        volumeClaimTemplates_+: {
+          prometheus_data: {
+            // https://prometheus.io/docs/prometheus/2.0/storage/#operational-aspects
+            //  On average, Prometheus uses only around 1-2 bytes per
+            //  sample. Thus, to plan the capacity of a Prometheus server,
+            //  you can use the rough formula:
+            //  needed_disk_space = retention_time_seconds * ingested_samples_per_second * bytes_per_sample
+            retention_days:: prom.deploy.spec.template.spec.containers_.default.args_.retention_days,
+            retention_secs:: self.retention_days * 86400,
+            time_series:: 1000, // wild guess
+            samples_per_sec:: self.time_series / $.config.global.scrape_interval_secs,
+            bytes_per_sample:: 2,
+            needed_space:: self.retention_secs * self.samples_per_sec * self.bytes_per_sample,
+            overhead_factor:: 1.5,
+            storage: "%dMi" % [self.overhead_factor * self.needed_space / 1e6],
+          },
+        },
         template+: {
           metadata+: {
             annotations+: {
@@ -187,10 +190,20 @@ local path_join(prefix, suffix) = (
             nodeSelector+: utils.archSelector("amd64"),
             volumes_+: {
               config: kube.ConfigMapVolume(prom.config),
-              data: kube.PersistentVolumeClaimVolume(prom.data),
             },
             securityContext+: {
               fsGroup: 65534, // nobody:nogroup
+            },
+            affinity+: {
+              podAntiAffinity+: {
+                preferredDuringSchedulingIgnoredDuringExecution+: [{
+                  weight: 100,
+                  podAffinityTerm: {
+                    labelSelector: this.spec.selector,
+                    topologyKey: "kubernetes.io/hostname",
+                  },
+                }],
+              },
             },
             containers_+: {
               default: kube.Container("prometheus") {
@@ -202,8 +215,8 @@ local path_join(prefix, suffix) = (
                   "web.external-url": $.ingress.prom_url,
 
                   "config.file": this.volumeMounts_.config.mountPath + "/prometheus.yml",
-                  "storage.tsdb.path": this.volumeMounts_.data.mountPath,
-                  retention_days:: 28,
+                  "storage.tsdb.path": this.volumeMounts_.prometheus_data.mountPath,
+                  retention_days:: 15,
                   "storage.tsdb.retention": "%dd" % self.retention_days,
 
                   // These are unmodified upstream console files. May
@@ -221,17 +234,17 @@ local path_join(prefix, suffix) = (
                 },
                 volumeMounts_+: {
                   config: {mountPath: "/etc/prometheus-config", readOnly: true},
-                  data: {mountPath: "/prometheus"},
+                  prometheus_data: {mountPath: "/prometheus"},
                 },
                 resources: {
-                  requests: {cpu: "500m", memory: "500Mi"},
+                  requests: {cpu: "500m", memory: "700Mi"},
                 },
                 livenessProbe: self.readinessProbe {
                   httpGet: {path: "/", port: this.ports[0].name},
                   // Crash recovery can take a _long_ time (many
                   // minutes), depending on the time since last
                   // successful compaction.
-                  initialDelaySeconds: 45 * 60,  // I have seen >>10mins
+                  initialDelaySeconds: 1 * 60 * 60,  // I have seen >45mins when NFS is overloaded.
                   successThreshold: 1,
                   timeoutSeconds: 10,
                   failureThreshold: 5,
@@ -267,6 +280,11 @@ local path_join(prefix, suffix) = (
         annotations+: {"kubernetes.io/cluster-service": "true"},
       },
       target_pod: am.deploy.spec.template,
+      spec+: {
+        // headless, for StatefulSet
+        assert am.svc.metadata.name == am.deploy.spec.serviceName,
+        clusterIP: "None",
+      },
     },
 
     config: kube.ConfigMap("alertmanager") + $.namespace {
@@ -281,12 +299,13 @@ local path_join(prefix, suffix) = (
       },
     },
 
-    data: kube.PersistentVolumeClaim("alertmanager-data") + $.namespace {
-      storage: "5Gi",
-    },
-
-    deploy: kube.Deployment("alertmanager") + $.namespace {
+    deploy: kube.StatefulSet("alertmanager") + $.namespace {
+      local this = self,
       spec+: {
+        replicas: 2,
+        volumeClaimTemplates_+: {
+          storage: { storage: "5Gi" },
+        },
         template+: {
           metadata+: {
             annotations+: {
@@ -301,18 +320,39 @@ local path_join(prefix, suffix) = (
             volumes_+: {
               config: kube.ConfigMapVolume(am.config),
               templates: kube.ConfigMapVolume(am.templates),
-              storage: kube.PersistentVolumeClaimVolume(am.data),
+            },
+            affinity+: {
+              podAntiAffinity+: {
+                preferredDuringSchedulingIgnoredDuringExecution+: [{
+                  weight: 100,
+                  podAffinityTerm: {
+                    labelSelector: this.spec.selector,
+                    topologyKey: "kubernetes.io/hostname",
+                  },
+                }],
+              },
             },
             containers_+: {
               default: kube.Container("alertmanager") {
-                image: "quay.io/prometheus/alertmanager:v0.13.0",
+                image: "quay.io/prometheus/alertmanager:v0.15.2",
                 args_+: {
                   "config.file": "/etc/alertmanager/config.yml",
                   "storage.path": "/alertmanager",
                   "web.external-url": $.ingress.am_url,
+
+                  "cluster.listen-address": ":9094",
+                  "cluster.advertise-address": "$(POD_IP):9094"
+                },
+                args+: [
+                  "--cluster.peer=alertmanager-%s.alertmanager.monitoring:9094" % [i]
+                  for i in std.range(0, this.spec.replicas - 1)
+                ],
+                env_+: {
+                  POD_IP: kube.FieldRef("status.podIP"),
                 },
                 ports_+: {
                   alertmanager: {containerPort: 9093},
+                  cluster: {containerPort: 9094},
                 },
                 volumeMounts_+: {
                   config: {mountPath: "/etc/alertmanager", readOnly: true},
