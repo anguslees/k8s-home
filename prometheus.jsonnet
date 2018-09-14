@@ -413,7 +413,7 @@ local path_join(prefix, suffix) = (
             tolerations: utils.toleratesMaster,
             containers_+: {
               default: kube.Container("node-exporter") {
-                image: "prom/node-exporter:v0.15.2",  // fixme: +this.arch
+                image: "quay.io/prometheus/node-exporter:v0.16.0",  // fixme: +this.arch
                 local v = self.volumeMounts_,
                 args_+: {
                   "path.procfs": v.procfs.mountPath,
