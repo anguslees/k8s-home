@@ -1,6 +1,6 @@
 local kube = import "kube.libsonnet";
 
-local email = "guslees+lego@gmail.com";
+local email = "guslees+letsencrypt@gmail.com";
 
 {
   namespace:: {metadata+: {namespace: "cert-manager"}},
@@ -72,7 +72,7 @@ local email = "guslees+lego@gmail.com";
           serviceAccountName: $.sa.metadata.name,
           containers_+: {
             default: kube.Container("cert-manager") {
-              image: "quay.io/jetstack/cert-manager-controller:v0.4.1",
+              image: "quay.io/jetstack/cert-manager-controller:v0.5.0",
               args_+: {
                 "cluster-resource-namespace": "$(POD_NAMESPACE)",
                 "leader-election-namespace": "$(POD_NAMESPACE)",
