@@ -61,7 +61,7 @@ local path_join(prefix, suffix) = (
               labels: {severity: "notice"},
               annotations: {
                 summary: "Frequently restarting container",
-                description: "{{$labels.namespace}}/{{$labels.container}} is restarting {{$value}} times per hour",
+                description: "{{$labels.namespace}}/{{$labels.container}} is restarting {{$value | printf \"%.2g\"}} times per hour",
               },
             },
             {
@@ -208,7 +208,7 @@ local path_join(prefix, suffix) = (
             containers_+: {
               default: kube.Container("prometheus") {
                 local this = self,
-                image: "prom/prometheus:v2.2.1",
+                image: "quay.io/prometheus/prometheus:v2.4.0",
                 args_+: {
                   //"log.level": "debug",  // default is info
 
