@@ -21,7 +21,7 @@ local utils = import "utils.libsonnet";
     },
 
     spec+: {
-      template+: utils.CriticalPodSpec {
+      template+: utils.CriticalPodSpec + utils.PromScrape(10249) {
         spec+: {
 	  nodeSelector: {
 	    "beta.kubernetes.io/arch": this.arch,
@@ -50,11 +50,21 @@ local utils = import "utils.libsonnet";
           },
           containers_: {
             kube_proxy: kube.Container("kube-proxy") {
-              image: "gcr.io/google_containers/kube-proxy-%s:v1.8.13" % this.arch,
+              image: "gcr.io/google_containers/kube-proxy-%s:v1.9.10" % this.arch,
               command: ["/usr/local/bin/kube-proxy"],
               args_+: {
                 "kubeconfig": "/var/lib/kube-proxy/kubeconfig.conf",
                 "cluster-cidr": "10.244.0.0/16",
+                "hostname-override": "$(NODE_NAME)",
+                // https://github.com/kubernetes/kubernetes/issues/53754
+                //"metrics-bind-address": "$(POD_IP):10249",
+              },
+              env_+: {
+                NODE_NAME: kube.FieldRef("spec.nodeName"),
+                POD_IP: kube.FieldRef("status.podIP"),
+              },
+              ports_+: {
+                metrics: {containerPort: 10249},
               },
               securityContext: {
                 privileged: true,
