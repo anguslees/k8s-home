@@ -132,6 +132,7 @@ local version = "v0.6.2";
                   monitoring: {containerPort: 7472},
                 },
                 resources+: {
+                  requests: {cpu: "10m", memory: "40Mi"},
                   limits: {cpu: "100m", memory: "100Mi"},
                 },
                 securityContext+: {
@@ -197,6 +198,7 @@ local version = "v0.6.2";
                   monitoring: {containerPort: 7472},
                 },
                 resources+: {
+                  requests: {cpu: "10m", memory: "40Mi"},
                   limits: {cpu: "100m", memory: "100Mi"},
                 },
                 securityContext+: {
