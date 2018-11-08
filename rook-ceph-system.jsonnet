@@ -125,9 +125,11 @@ local kube = import "kube.libsonnet";
           //  failed to run operator. failed to list legacy volume attachments: volumeattachments.rook.io is forbidden: User "system:serviceaccount:rook-ceph-system:rook-ceph-system" cannot list volumeattachments.rook.io in the namespace "rook-ceph-system"
         // and
         //    op-cluster: failed finalizer for cluster. failed to get volume attachments for operator namespace rook-ceph-system: volumes.rook.io is forbidden: User "system:serviceaccount:rook-ceph-system:rook-ceph-system" cannot list volumes.rook.io in the namespace "rook-ceph-system"
+        // and
+        //    MountVolume.SetUp failed for volume "pvc-84d2422b-a758-11e8-99a2-02030782ac80" : mount command failed, status: Failure, reason: Rook: Mount volume failed: failed to create volume CRD pvc-84d2422b-a758-11e8-99a2-02030782ac80. volumes.rook.io is forbidden: User "system:serviceaccount:rook-ceph-system:rook-ceph-system" cannot create volumes.rook.io in the namespace "rook-ceph-system"
         apiGroups: ["rook.io"],
         resources: ["volumeattachments", "volumes"],
-        verbs: ["get", "list", "watch"],
+        verbs: ["get", "list", "watch", "patch", "create", "update", "delete"],
       },
     ],
   },
@@ -168,7 +170,7 @@ local kube = import "kube.libsonnet";
           },
           containers_+: {
             operator: kube.Container("operator") {
-              image: "rook/ceph:v0.8.1",
+              image: "rook/ceph:v0.8.3",
               args: ["ceph", "operator"],
               volumeMounts_+: {
                 config: {mountPath: "/var/lib/rook"},
