@@ -160,17 +160,19 @@ local sshKeys = [
                   "--volume=%(n)s,kind=host,source=%(p)s --mount volume=%(n)s,target=%(p)s" % {n: name(p), p: p}
                   for p in ["/etc/resolv.conf", "/var/lib/cni", "/etc/cni/net.d", "/opt/cni/bin", "/var/log"]
                 ]),
-                ExecStartPre: "/bin/mkdir -p " + std.join(" ", [
-                  "/opt/cni/bin",
-                  "/etc/kubernetes/manifests",
-                  "/etc/cni/net.d",
-                  "/etc/kubernetes/checkpoint-secrets",
-                  "/etc/kubernetes/inactive-manifests",
-                  "/var/lib/cni",
-                  "/var/lib/kubelet/volumeplugins",
-                ]),
+                ExecStartPre: [
+                  "-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid",
+                  "/bin/mkdir -p " + std.join(" ", [
+                    "/opt/cni/bin",
+                    "/etc/kubernetes/manifests",
+                    "/etc/cni/net.d",
+                    "/etc/kubernetes/checkpoint-secrets",
+                    "/etc/kubernetes/inactive-manifests",
+                    "/var/lib/cni",
+                    "/var/lib/kubelet/volumeplugins",
+                  ]),
+                ],
                 // ExecStartPre=/usr/bin/bash -c "grep 'certificate-authority-data' /etc/kubernetes/kubeconfig | awk '{print $2}' | base64 -d > /etc/kubernetes/ca.crt"
-                // ExecStartPre=-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid
                 ExecStart: std.join(" ", ["/usr/lib/coreos/kubelet-wrapper"] + [
                   "--%s=%s" % kv for kv in kube.objectItems(self.args_)]),
                 // https://github.com/kubernetes/release/blob/master/rpm/10-kubeadm.conf
