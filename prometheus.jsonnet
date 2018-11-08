@@ -174,6 +174,7 @@ local path_join(prefix, suffix) = (
             needed_space:: self.retention_secs * self.samples_per_sec * self.bytes_per_sample,
             overhead_factor:: 1.5,
             storage: "%dMi" % [self.overhead_factor * self.needed_space / 1e6],
+            storageClass: "ceph-block",
           },
         },
         template+: {
@@ -208,7 +209,7 @@ local path_join(prefix, suffix) = (
             containers_+: {
               default: kube.Container("prometheus") {
                 local this = self,
-                image: "quay.io/prometheus/prometheus:v2.4.0",
+                image: "quay.io/prometheus/prometheus:v2.4.3",
                 args_+: {
                   //"log.level": "debug",  // default is info
 
@@ -218,6 +219,8 @@ local path_join(prefix, suffix) = (
                   "storage.tsdb.path": this.volumeMounts_.prometheus_data.mountPath,
                   retention_days:: 15,
                   "storage.tsdb.retention": "%dd" % self.retention_days,
+
+                  // "As a rule of thumb, you should have at least 50% headroom in physical memory over the configured heap size. (Or, in other words, set storage.local.target-heap-size to a value of two thirds of the physical memory limit Prometheus should not exceed.)"
 
                   // These are unmodified upstream console files. May
                   // want to ship in config instead.
@@ -237,7 +240,8 @@ local path_join(prefix, suffix) = (
                   prometheus_data: {mountPath: "/prometheus"},
                 },
                 resources: {
-                  requests: {cpu: "500m", memory: "700Mi"},
+                  requests: {cpu: "500m", memory: "3Gi"},
+                  limits: self.requests {cpu: "1"},
                 },
                 livenessProbe: self.readinessProbe {
                   httpGet: {path: "/", port: this.ports[0].name},
@@ -304,7 +308,7 @@ local path_join(prefix, suffix) = (
       spec+: {
         replicas: 2,
         volumeClaimTemplates_+: {
-          storage: { storage: "5Gi" },
+          storage: { storage: "5Gi", storageClass: "ceph-block" },
         },
         template+: {
           metadata+: {
@@ -368,6 +372,10 @@ local path_join(prefix, suffix) = (
                   initialDelaySeconds: 3,
                   timeoutSeconds: 10,
                   periodSeconds: 3,
+                },
+                resources+: {
+                  limits: {cpu: "20m", memory: "40Mi"},
+                  requests: self.limits,
                 },
               },
               config_reload: kube.Container("configmap-reload") {
@@ -443,6 +451,10 @@ local path_join(prefix, suffix) = (
                   root: {mountPath: "/rootfs", readOnly: true},
                   procfs: {mountPath: "/host/proc", readOnly: true},
                   sysfs: {mountPath: "/host/sys", readOnly: true},
+                },
+                resources+: {
+                  limits: {cpu: "100m", memory: "50Mi"},
+                  requests: {cpu: "10m", memory: "25Mi"},
                 },
               },
             },
@@ -529,6 +541,10 @@ local path_join(prefix, suffix) = (
                   httpGet: {path: "/healthz", port: 8080},
                   initialDelaySeconds: 5,
                   timeoutSeconds: 5,
+                },
+                resources+: {
+                  limits: {cpu: "100m", memory: "100Mi"},
+                  requests: {cpu: "10m", memory: "50Mi"},
                 },
               },
               resizer: kube.Container("addon-resizer") {
