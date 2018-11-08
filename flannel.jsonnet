@@ -85,7 +85,7 @@ local cniplugins_version = "v0.6.0";
             },
             installbin: utils.shcmd("install-bin") {
               shcmd:: |||
-                if [ ! -e /opt/cni/bin/flannel ]; then
+                if [ ! -e /opt/cni/bin/portmap ]; then
                   wget https://github.com/containernetworking/plugins/releases/download/$VERSION/cni-plugins-$ARCH-$VERSION.tgz
                   tar zxvf cni-plugins-$ARCH-$VERSION.tgz -C /opt/cni/bin/
                 fi
