@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local utils = import "utils.libsonnet";
 
 // aka lts-alpine
-local version = "2.138.1-alpine";
+local version = "2.138.2-alpine";
 
 {
   namespace:: {metadata+: {namespace: "jenkins"}},
@@ -316,20 +316,14 @@ local version = "2.138.1-alpine";
     target_svc: $.masterSvc,
   },
 
-  pvc: kube.PersistentVolumeClaim("jenkins-data") + $.namespace {
-    storage: "10Gi",
-  },
-
-  // Used by/for "External Workspace" plugin.
-  exws: kube.PersistentVolumeClaim("jenkins-external-workspace") + $.namespace {
-    storage: "100Gi",
-    storageClass: "managed-nfs-storage",
-    spec+: {accessModes: ["ReadWriteMany"]},
-  },
-
   // FIXME: should be a StatefulSet, but they don't update well :(
-  master: kube.Deployment("jenkins") + $.namespace {
+  master: kube.StatefulSet("jenkins") + $.namespace {
     spec+: {
+      replicas: 1,
+      podManagementPolicy: "Parallel",
+      volumeClaimTemplates_: {
+        home: {storage: "10Gi", storageClass: "ceph-block"},
+      },
       template+: {
         metadata+: {
           annotations+: {
@@ -347,12 +341,10 @@ local version = "2.138.1-alpine";
             fsGroup: self.runAsUser,
           },
           volumes_+: {
-            home: kube.PersistentVolumeClaimVolume($.pvc),
             config: kube.ConfigMapVolume($.config),
             init: kube.ConfigMapVolume($.initScripts),
             plugins: kube.EmptyDirVolume(),
             secrets: kube.EmptyDirVolume(), // todo
-            exws: kube.PersistentVolumeClaimVolume($.exws),
           },
           initContainers_+: {
             // TODO: The "right" thing to do is to build a custom
@@ -375,13 +367,24 @@ local version = "2.138.1-alpine";
               local container = self,
               image: "jenkins/jenkins:" + version,
               env_+: {
+                local heapmax = kube.siToNum(container.resources.requests.memory),
                 JAVA_OPTS: std.join(" ", [
                   //"-XX:+UnlockExperimentalVMOptions",
                   //"-XX:+UseCGroupMemoryLimitForHeap",
                   //"-XX:MaxRAMFraction=1",
-                  "-Xmx%dm" % (kube.siToNum(container.resources.requests.memory) /
-                      std.pow(2, 20)),
+                  "-Xmx%dm" % (heapmax / std.pow(2, 20)),
+                  "-Xms%dm" % (heapmax * 0.6 / std.pow(2, 20)),
                   "-XshowSettings:vm",
+                  // See also https://jenkins.io/blog/2016/11/21/gc-tuning/
+                  "-XX:+UseG1GC",
+                  "-XX:+ExplicitGCInvokesConcurrent",
+                  "-XX:+ParallelRefProcEnabled",
+                  "-XX:+UseStringDeduplication",
+                  "-XX:+UnlockExperimentalVMOptions",
+                  "-XX:G1NewSizePercent=20",
+                  "-XX:+UnlockDiagnosticVMOptions",
+                  "-XX:G1SummarizeRSetStatsPeriod=1",
+
                   "-Dhudson.slaves.NodeProvisioner.initialDelay=0",
                   "-Dhudson.slaves.NodeProvisioner.MARGIN=50",
                   "-Dhudson.slaves.NodeProvisioner.MARGIN0=0.85",
@@ -423,7 +426,6 @@ local version = "2.138.1-alpine";
                 init: {mountPath: "/usr/share/jenkins/ref/init.groovy.d", readOnly: true},
                 plugins: {mountPath: "/usr/share/jenkins/ref/plugins", readOnly: true},
                 secrets: {mountPath: "/usr/share/jenkins/ref/secrets", readOnly: true},
-                exws: {mountPath: "/exws", readOnly: false}
               },
             },
           },
