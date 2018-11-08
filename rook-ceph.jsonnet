@@ -48,13 +48,14 @@ local arch = "amd64";
       },
       placement: {
         all: {
-          nodeAffinty: {
+          nodeAffinity: {
             requiredDuringSchedulingIgnoredDuringExecution: {
-              nodeSelectorTerms: [
-                {
-                  matchLabels: utils.archSelector(arch),
-                },
-              ],
+              nodeSelectorTerms+: [{
+                matchExpressions: [
+                  {key: kv[0], operator: "In", values: [kv[1]]}
+                  for kv in kube.objectItems(utils.archSelector(arch))
+                ],
+              }],
             },
           },
         },
@@ -87,6 +88,29 @@ local arch = "amd64";
     },
   },
 
+  // These are not defined upstream, but should be (imo).
+  // https://github.com/rook/rook/issues/2128
+  monDisruptionBudget: kube.PodDisruptionBudget("rook-ceph-mon") + $.namespace {
+    spec+: {
+      minAvailable:: null,
+      maxUnavailable: 1,
+      selector: {matchLabels: {app: "rook-ceph-mon"}},
+    },
+  },
+  mdsDisruptionBudget: kube.PodDisruptionBudget("rook-ceph-mds") + $.namespace {
+    spec+: {
+      minAvailable: 1,
+      selector: {matchLabels: {app: "rook-ceph-mds"}},
+    },
+  },
+  osdDisruptionBudget: kube.PodDisruptionBudget("rook-ceph-osd") + $.namespace {
+    spec+: {
+      minAvailable:: null,
+      maxUnavailable: 1,  // not true _after_ re-replication has taken place..
+      selector: {matchLabels: {app: "rook-ceph-osd"}},
+    },
+  },
+
   // Define storage pools / classes
   replicapool: rookCephSystem.Pool("replicapool") + $.namespace {
     spec+: {
@@ -104,7 +128,7 @@ local arch = "amd64";
     },
   },
 
-  /* Disabled for now - still needs provisioner + storageclass
+  // NB: Still needs provisioner + storageclass support in rook
   filesystem: rookCephSystem.Filesystem("ceph-filesystem") + $.namespace {
     spec+: {
       metadataPool: {replicated: {size: 3}},
@@ -115,5 +139,4 @@ local arch = "amd64";
       },
     },
   },
-  */
 }
