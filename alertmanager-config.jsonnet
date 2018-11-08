@@ -3,8 +3,10 @@
   global: {
     resolve_timeout: "5m",
 
-    smtp_smarthost: "mongrel.lan:25",
+    smtp_smarthost: "smtp.mail:25",
     smtp_from: "alertmanager@oldmacdonald.farm",
+    smtp_hello: "alertmanager.monitoring.svc",
+    smtp_require_tls: false,
   },
 
   //templates: []
