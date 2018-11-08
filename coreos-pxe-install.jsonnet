@@ -2,9 +2,11 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local coreos_kubelet_tag = "v1.8.14_coreos.0";
+local coreos_kubelet_tag = "v1.9.8_coreos.0";
 
 local default_env = {
+  // NB: dockerd can't route to a cluster LB VIP? (fixme)
+  //http_proxy: "http://proxy.lan:80/",
   http_proxy: "http://192.168.0.10:3128/",
   no_proxy: ".lan,.local",
 };
@@ -105,6 +107,8 @@ local sshKeys = [
                  },
                },
              })),
+        file("/etc/sysctl.d/80-swappiness.conf",
+            "vm.swappiness=10"),
       ],
     },
     systemd: {
@@ -210,6 +214,48 @@ local sshKeys = [
 	  },
           contents: std.manifestIni(self.contents_),
 	},
+        {
+          name: "create-swapfile.service",
+          contents_:: {
+            sections: {
+              Unit: {
+                Description: "Create a swapfile",
+                RequiresMountsFor: "/var",
+                ConditionPathExists: "!/var/vm/swapfile1",
+              },
+              Service: {
+                Type: "oneshot",
+                ExecStart: [
+                  "/usr/bin/mkdir -p /var/vm",
+                  "/usr/bin/fallocate -l 8GiB /var/vm/swapfile1",
+                  "/usr/bin/chmod 600 /var/vm/swapfile1",
+                  "/usr/sbin/mkswap /var/vm/swapfile1",
+                ],
+                RemainAfterExit: "true",
+              },
+            },
+          },
+          contents: std.manifestIni(self.contents_),
+        },
+        {
+          name: "var-vm-swapfile1.swap",
+          contents_:: {
+            sections: {
+              Unit: {
+                Description: "Turn on swap",
+                Requires: "create-swapfile.service",
+                After: "create-swapfile.service",
+              },
+              Swap: {
+                What: "/var/vm/swapfile1",
+              },
+              Install: {
+                WantedBy: "multi-user.target",
+              },
+            },
+          },
+          contents: std.manifestIni(self.contents_),
+        },
       ],
     },
     networkd: {},
