@@ -9,21 +9,32 @@ local jenkins = import "jenkins.jsonnet";
 {
   namespace:: jenkins.namespace,
 
-  dldir: kube.PersistentVolumeClaim("oe-dl-dir") + $.namespace {
-    storageClass: "managed-nfs-storage",
-    storage: "20Gi",
+  // No dynamic provisioning for rook-cephfs yet - so use static PV
+  scratchVolume: kube.PersistentVolume("oe-scratch") {
     spec+: {
-      storageClassName: null, // avoid changing the current default.  FIXME: recreate at some point.
+      storageClassName: "rook-cephfs",
+      capacity: {storage: "200Gi"},
       accessModes: ["ReadWriteMany"],
+      persistentVolumeReclaimPolicy: "Recycle",
+      flexVolume: {
+        driver: "ceph.rook.io/rook",
+        fsType: "ceph",
+        options: {
+          fsName: "ceph-filesystem",
+          clusterNamespace: "rook-ceph",
+        },
+      },
     },
   },
 
-  sstate: kube.PersistentVolumeClaim("oe-sstate-dir") + $.namespace {
-    storageClass: "managed-nfs-storage",
-    storage: "200Gi",
+  scratch: kube.PersistentVolumeClaim("oe-scratch") + $.namespace {
+    storageClass: "rook-cephfs",
+    storage: $.scratchVolume.spec.capacity.storage,
     spec+: {
-      storageClassName: null, // avoid changing the current default.  FIXME: recreate at some point.
       accessModes: ["ReadWriteMany"],
+      selector: {
+        matchLabels: $.scratchVolume.metadata.labels,
+      },
     },
   },
 
@@ -39,16 +50,16 @@ local jenkins = import "jenkins.jsonnet";
                 fsGroup: self.runAsUser,
               },
               volumes_+: {
-                dl: kube.PersistentVolumeClaimVolume($.dldir),
+                scratch: kube.PersistentVolumeClaimVolume($.scratch),
               },
               containers_+: {
                 update: utils.shcmd("update") {
                   image: "alpine/git:1.0.4",
                   volumeMounts_+: {
-                    dl: {mountPath: "/downloads"},
+                    scratch: {mountPath: "/scratch"},
                   },
                   shcmd: |||
-                    cd /downloads/gitref
+                    cd /scratch/downloads/gitref
 
                     while read name url; do
                       git remote add $name $url || :
