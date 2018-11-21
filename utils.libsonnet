@@ -158,10 +158,6 @@ local kube = import "kube.libsonnet";
   SealedSecret(name):: kube._Object("bitnami.com/v1alpha1", "SealedSecret", name) {
     local this = self,
 
-    // Terrible workaround for
-    // https://github.com/kubernetes/kubernetes/issues/53379
-    metadata+: {annotations+: {"dummychange": std.extVar("RANDOM")}},
-
     // These are placed here to make this look (to jsonnet) like a
     // regular Secret.  If anything peeks at some actual secret info,
     // it will hit a jsonnet error

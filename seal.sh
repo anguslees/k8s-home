@@ -3,5 +3,5 @@
 : ${KUBECONFIG:=$HOME/.kube/homeconf}
 export KUBECONFIG
 
-kubecfg show -V RANDOM=$(date +%s) "$@" |
+kubecfg show "$@" |
 kubeseal --cert sealkey.crt

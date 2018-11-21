@@ -7,4 +7,4 @@ export KUBECONFIG
 # SealedSecrets will fail to validate before the SealedSecret CRD is
 # created)
 exec kubecfg \
-    update --ignore-unknown --gc-tag=garagecloud -V RANDOM=$(date +%s) "$@" all.jsonnet
+    update --ignore-unknown --gc-tag=garagecloud "$@" all.jsonnet
