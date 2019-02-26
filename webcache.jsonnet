@@ -49,12 +49,20 @@ local utils = import "utils.libsonnet";
   deploy: kube.Deployment("squid") + $.namespace {
     spec+: {
       template+: {
+        metadata+: {
+          annotations+: {
+            "prometheus.io/scrape": "true",
+            "prometheus.io/port": "9301",
+            "prometheus.io/path": "/metrics",
+          },
+        },
         spec+: {
           automountServiceAccountToken: false,
           volumes_+: {
             data: kube.EmptyDirVolume(),  // NB: non-persistent cache
             conf: kube.ConfigMapVolume($.config),
           },
+          default_container: "squid",
           containers_+: {
             squid: kube.Container("squid") {
               image: "sameersbn/squid:3.5.27",
@@ -72,6 +80,22 @@ local utils = import "utils.libsonnet";
               resources+: {
                 limits: {cpu: "1", memory: "1Gi"},
                 requests: {cpu: "10m", memory: "280Mi"},
+              },
+            },
+            metrics: kube.Container("squid-exporter") {
+              image: "boynux/squid-exporter:v1.4",
+              args_+: {
+                listen: ":9301",
+              },
+              ports_+: {
+                metrics: {containerPort: 9301},
+              },
+              readinessProbe: {
+                httpGet: {path: "/", port: "metrics"},
+                periodSeconds: 30,
+              },
+              livenessProbe: self.readinessProbe {
+                initialDelaySeconds: 30,
               },
             },
           },
