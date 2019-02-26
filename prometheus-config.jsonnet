@@ -321,6 +321,10 @@ local POD_LABEL(l) = "__meta_kubernetes_pod_label_" + l;
         },
       ],
     },
+
+    other: {
+      static_configs: [{targets: ["192.168.0.1:9100"]}],
+    },
   },
   scrape_configs: [{job_name: k} + self.scrape_configs_[k]
                    for k in std.objectFields(self.scrape_configs_)],
