@@ -4,7 +4,7 @@
     resolve_timeout: "5m",
 
     smtp_smarthost: "smtp.mail:25",
-    smtp_from: "alertmanager@oldmacdonald.farm",
+    smtp_from: "alertmanager@mongrel.lan",
     smtp_hello: "alertmanager.monitoring.svc",
     smtp_require_tls: false,
   },
@@ -35,7 +35,7 @@
 
   receivers_:: {
     email: {
-      email_configs: [{to: "guslees+alerts@gmail.com"}],
+      email_configs: [{to: "gus@mongrel.lan"}],
     },
   },
   receivers: [{name: k} + self.receivers_[k] for k in std.objectFields(self.receivers_)],
