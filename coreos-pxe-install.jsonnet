@@ -283,9 +283,9 @@ local sshKeys = [
     shcmd:: |||
       cd /data
       wget http://boot.ipxe.org/undionly.kpxe
-      ln -s undionly.kpxe undionly.0
+      ln -sf undionly.kpxe undionly.0
       wget http://boot.ipxe.org/ipxe.efi
-      ln -s ipxe.efi ipxe.0
+      ln -sf ipxe.efi ipxe.0
     |||,
     volumeMounts_+: {
       tftpboot: { mountPath: "/data" },
