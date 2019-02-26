@@ -59,6 +59,11 @@ local POD_LABEL(l) = "__meta_kubernetes_pod_label_" + l;
     // as HA API server deployments.
     apiservers: k8sScrape("endpoints") {
       job_name: "kubernetes-apiservers",
+      tls_config+: {
+        // Right CA, but doesn't pass IP address checks :(
+        // "certificate is valid for 10.96.0.1, not 192.168.0.128"
+        insecure_skip_verify: true,
+      },
       // Keep only the default/kubernetes service endpoints for the
       // https port. This will add targets for each API server which
       // Kubernetes adds an endpoint to the default/kubernetes

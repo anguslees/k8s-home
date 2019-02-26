@@ -56,7 +56,7 @@ local path_join(prefix, suffix) = (
             },
             {
               alert: "CrashLooping",
-              expr: "sum(rate(kube_pod_container_status_restarts[15m])) BY (namespace, container) * 3600 > 0",
+              expr: "sum(rate(kube_pod_container_status_restarts_total[15m])) BY (namespace, container) * 3600 > 0",
               "for": "1h",
               labels: {severity: "notice"},
               annotations: {
