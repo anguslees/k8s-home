@@ -83,4 +83,47 @@ local jenkins = import "jenkins.jsonnet";
       },
     },
   },
+
+  cleaner: kube.CronJob("oe-sstate-cleaner") + $.namespace {
+    spec+: {
+      schedule: "@weekly",
+      jobTemplate+: {
+        spec+: {
+          template+: {
+            spec+: {
+              securityContext+: {
+                runAsUser: 10000,
+                fsGroup: self.runAsUser,
+              },
+              volumes_+: {
+                scratch: kube.PersistentVolumeClaimVolume($.scratch),
+              },
+              containers_+: {
+                update: utils.shcmd("update") {
+                  // Need gnu find
+                  image: "debian:jessie-slim",
+                  volumeMounts_+: {
+                    scratch: {mountPath: "/scratch"},
+                  },
+                  shcmd: |||
+                    cd /scratch
+
+                    echo Before:
+                    df -h .
+
+                    find sstate-cache -name 'sstate*' -atime +90 -delete
+
+                    #find downloads -type f -atime +120 -delete
+
+                    echo After:
+                    df -h .
+                  |||,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
 }
