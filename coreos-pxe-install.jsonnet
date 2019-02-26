@@ -269,7 +269,9 @@ local sshKeys = [
       "boot.ipxe": |||
         #!ipxe
 
-        set base-url http://beta.release.core-os.net/amd64-usr/current
+        #set base-url http://beta.release.core-os.net/amd64-usr/current
+        # Local IPFS copy, cached on 2018-09-19:
+        set base-url http://ipfs.k.lan/ipfs/QmeWaqrxn3PGrxbVfeejQDHPLjA6ETpQcX3epf7avaPwSg
         # coreos.first_boot=1 coreos.config.url=https://example.com/pxe-config.ign
         kernel ${base-url}/coreos_production_pxe.vmlinuz initrd=coreos_production_pxe_image.cpio.gz coreos.autologin=tty1
         initrd ${base-url}/coreos_production_pxe_image.cpio.gz
