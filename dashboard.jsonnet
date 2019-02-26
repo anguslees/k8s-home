@@ -1,7 +1,8 @@
 local kube = import "kube.libsonnet";
+local utils = import "utils.libsonnet";
 
-local arch = "arm";
-local version = "v1.7.1";
+local arch = "amd64";
+local version = "v1.8.3";
 
 {
   namespace:: {
@@ -10,13 +11,60 @@ local version = "v1.7.1";
 
   serviceAccount: kube.ServiceAccount("kubernetes-dashboard") + $.namespace,
 
-  clusterRoleBinding: kube.ClusterRoleBinding("kubernetes-dashboard") {
-    roleRef: {
-      apiGroup: "rbac.authorization.k8s.io",
-      kind: "ClusterRole",
-      name: "cluster-admin",
-    },
-    subjects_: [$.serviceAccount],
+  ing: utils.Ingress("kubernetes-dashboard") + $.namespace {
+    host: "dashboard.k.lan",
+    target_svc: $.service,
+  },
+
+  dashboardRole: kube.Role("kubernetes-dashboard-minimal") + $.namespace {
+    rules: [
+      {
+        apiGroups: [""],
+        resources: ["secrets"],
+        verbs: ["create"],
+      },
+      {
+        apiGroups: [""],
+        resources: ["secrets"],
+        resourceNames: ["kubernetes-dashboard-key-holder", $.certs.metadata.name],
+        verbs: ["get", "update", "delete"],
+      },
+      {
+        apiGroups: [""],
+        resources: ["configmaps"],
+        verbs: ["create"],
+      },
+      {
+        apiGroups: [""],
+        resources: ["configmaps"],
+        resourceNames: [$.config.metadata.name],
+        verbs: ["get", "update"],
+      },
+      {
+        apiGroups: [""],
+        resources: ["services"],
+        resourceNames: ["heapster"],
+        verbs: ["proxy"],
+      },
+      {
+        apiGroups: [""],
+        resources: ["services/proxy"],
+        resourceNames: ["heapster", "http:heapster:", "https:heapster:"],
+        verbs: ["get"],
+      },
+    ],
+  },
+
+  dashboardRoleBinding: kube.RoleBinding("kubernetes-dashboard-minimal") + $.namespace {
+    roleRef_: $.dashboardRole,
+    subjects_+: [$.serviceAccount],
+  },
+
+  config: kube.ConfigMap("kubernetes-dashboard-settings") + $.namespace {
+    data+: {},
+  },
+
+  certs: kube.Secret("kubernetes-dashboard-certs") + $.namespace {
   },
 
   service: kube.Service("kubernetes-dashboard") + $.namespace {
@@ -27,7 +75,9 @@ local version = "v1.7.1";
       },
     },
     target_pod: $.deployment.spec.template,
-    port: 80,
+    spec+: {
+      ports: [{port: 443, targetPort: 8443}],
+    },
   },
 
   deployment: kube.Deployment("kubernetes-dashboard") + $.namespace {
@@ -42,22 +92,35 @@ local version = "v1.7.1";
             effect: "NoSchedule",
           }],
           */
-	  nodeSelector: {
-	    "beta.kubernetes.io/arch": arch,
-	  },
+	  nodeSelector+: utils.archSelector(arch),
+          volumes_+: {
+            certs: kube.SecretVolume($.certs),
+            tmp: kube.EmptyDirVolume(),
+          },
           containers_+: {
             default: kube.Container("kubernetes-dashboard") {
               image: "gcr.io/google_containers/kubernetes-dashboard-%s:%s" % [arch, version],
+              args_+: {
+                "auto-generate-certificates": true,
+              },
               ports_+: {
-                default: { containerPort: 9090 },
+                default: {containerPort: 8443, protocol: "TCP"},
               },
               resources+: {
-                limits: { cpu: "100m", memory: "300Mi" },
+                limits: {cpu: "200m", memory: "500Mi"},
+                requests: {cpu: "50m", memory: "200Mi"},
               },
-              livenessProbe: {
-                httpGet: { path: "/", port: 9090 },
-                initialDelaySeconds: 30,
+              readinessProbe: {
+                httpGet: {path: "/", port: 8443, scheme: "HTTPS"},
+                periodSeconds: 20,
                 timeoutSeconds: 30,
+              },
+              livenessProbe: self.readinessProbe {
+                initialDelaySeconds: 30,
+              },
+              volumeMounts_+: {
+                certs: {mountPath: "/certs"},
+                tmp: {mountPath: "/tmp"},
               },
             },
           },
