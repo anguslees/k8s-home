@@ -1,7 +1,6 @@
 {
   kube_system: import "kube-system.jsonnet",
 
-  dashboard: import "dashboard.jsonnet",
   flannel: import "flannel.jsonnet",
   heapster: import "heapster.jsonnet",
   // dashboard (at least v1.7.1) only shows heapster stats
