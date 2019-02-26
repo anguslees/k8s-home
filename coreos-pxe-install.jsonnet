@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local coreos_kubelet_tag = "v1.9.8_coreos.0";
+local coreos_kubelet_tag = "v1.10.12";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)
@@ -80,7 +80,7 @@ local sshKeys = [
       },
       files: [
         file("/etc/kubernetes/kubelet.env", |||
-               KUBELET_IMAGE_URL=quay.io/coreos/hyperkube
+               KUBELET_IMAGE_URL=docker://gcr.io/google-containers/hyperkube
                KUBELET_IMAGE_TAG=%(tag)s
              ||| % {tag: coreos_kubelet_tag},
             ),
@@ -199,7 +199,6 @@ local sshKeys = [
                   "pod-manifest-path": "/etc/kubernetes/manifests",
                   "kubeconfig": "/etc/kubernetes/kubelet.conf",
                   "bootstrap-kubeconfig": "/etc/kubernetes/bootstrap-kubelet.conf",
-                  "require-kubeconfig": true,
                   "cadvisor-port": 0,
                   "volume-plugin-dir": "/var/lib/kubelet/volumeplugins",
                 },
