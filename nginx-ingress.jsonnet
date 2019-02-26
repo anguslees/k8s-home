@@ -1,6 +1,6 @@
 local kube = import "kube.libsonnet";
 local utils = import "utils.libsonnet";
-local vips = import "keepalived.jsonnet";
+local metallb = (import "all.jsonnet").metallb;
 
 {
   namespace:: { metadata+: { namespace: "kube-system" }},
@@ -168,13 +168,36 @@ local vips = import "keepalived.jsonnet";
   },
 
   controller: kube.Deployment("nginx-ingress-controller") + $.namespace {
+    local this = self,
     spec+: {
+      replicas: 2,
       template+: utils.PromScrape(10254) {
         spec+: {
           nodeSelector+: utils.archSelector("amd64"),
           serviceAccountName: $.serviceAccount.metadata.name,
           //hostNetwork: true, // access real source IPs, IPv6, etc
           terminationGracePeriodSeconds: 60,
+          affinity+: {
+            podAffinity+: {
+              preferredDuringSchedulingIgnoredDuringExecution+: [{
+                weight: 10,
+                podAffinityTerm: {
+                  namespaces: [metallb.speaker.deploy.metadata.namespace],
+                  labelSelector: metallb.speaker.deploy.spec.selector,
+                  topologyKey: "kubernetes.io/hostname",
+                },
+              }],
+            },
+            podAntiAffinity+: {
+              preferredDuringSchedulingIgnoredDuringExecution+: [{
+                weight: 100,
+                podAffinityTerm: {
+                  labelSelector: this.spec.selector,
+                  topologyKey: "kubernetes.io/hostname",
+                },
+              }],
+            },
+          },
           containers_+: {
             default: kube.Container("nginx") {
               image: "quay.io/kubernetes-ingress-controller/nginx-ingress-controller:0.19.0",
@@ -213,6 +236,10 @@ local vips = import "keepalived.jsonnet";
               },
               livenessProbe: self.readinessProbe {
                 initialDelaySeconds: 10,
+              },
+              resources: {
+                requests: {cpu: "10m", memory: "65Mi"},
+                limits: { cpu: "1", memory: "500Mi" },
               },
             },
           },
