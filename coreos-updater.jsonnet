@@ -7,7 +7,7 @@ local stripLeading(c, str) = if std.startsWith(str, c) then
 
 local isalpha(c) = std.codepoint(c) >= std.codepoint("a") && std.codepoint(c) <= std.codepoint("z");
 
-local version = "v0.6.0";
+local version = "v0.7.0";
 
 local arch = "amd64";
 
