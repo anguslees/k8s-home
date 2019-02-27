@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local utils = import "utils.libsonnet";
 
 // aka lts-alpine
-local version = "2.138.2-alpine";
+local version = "2.150.3-alpine";
 
 {
   namespace:: {metadata+: {namespace: "jenkins"}},
@@ -80,7 +80,7 @@ local version = "2.138.2-alpine";
              ["containers",
               ["org.csanchez.jenkins.plugins.kubernetes.ContainerTemplate",
                ["name", "jnlp"],
-               ["image", "jenkins/jnlp-slave:3.19-1-alpine"],
+               ["image", "jenkins/jnlp-slave:3.27-1-alpine"],
                ["privileged", std.toString(false)],
                ["workingDir", "/home/jenkins"],
                ["command"],
@@ -417,8 +417,8 @@ local version = "2.138.2-alpine";
                 periodSeconds: 60,
               },
               resources: {
-                limits: {cpu: "1", memory: "1Gi"},
-                requests: {cpu: "10m", memory: "700Mi"},
+                limits: {cpu: "1", memory: "1.2Gi"},
+                requests: {cpu: "10m", memory: "1Gi"},
               },
               volumeMounts_+: {
                 home: {mountPath: "/var/jenkins_home", readOnly: false},
