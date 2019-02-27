@@ -39,7 +39,7 @@ local image = "mycroftai/docker-mycroft:latest"; // FIXME: a release?
     spec+: {
       replicas: 1,
       volumeClaimTemplates_: {
-        data: {storage: "1G"},
+        data: {storageClass: "ceph-block", storage: "1G"},
       },
       template+: {
         spec+: {
