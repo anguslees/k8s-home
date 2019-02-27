@@ -1,0 +1,32 @@
+Group  gVac     "Xiaomi Robot Vacuum"      <fan>
+Group  gVacStat "Status Details"           <status> (gVac)
+Group  gVacCons "Consumables Usage"        <line-increase> (gVac)
+Group  gVacDND  "Do Not Disturb Settings"  <moon> (gVac)
+Group  gVacHist "Cleaning History"         <calendar> (gVac)
+
+String actionControl  "Vacuum Control"          {channel="miio:vacuum:04EFDA6D:actions#control" }
+String actionCommand  "Vacuum Command"          {channel="miio:vacuum:04EFDA6D:actions#commands" }
+
+Number statusBat    "Battery Level [%1.0f%%]" <battery>   (gVac,gVacStat) {channel="miio:vacuum:04EFDA6D:status#battery" }
+Number statusArea    "Cleaned Area [%1.0fm²]" <zoom>   (gVac,gVacStat) {channel="miio:vacuum:04EFDA6D:status#clean_area" }
+Number statusTime    "Cleaning Time [%1.0f\']" <clock>   (gVac,gVacStat) {channel="miio:vacuum:04EFDA6D:status#clean_time" }
+String  statusError    "Error [%s]"  <error>  (gVac,gVacStat) {channel="miio:vacuum:04EFDA6D:status#error_code" }
+Number statusFanPow    "Fan Power [%1.0f %%]"  <signal>   (gVacStat) {channel="miio:vacuum:04EFDA6D:status#fan_power" }
+Number statusClean    "In Cleaning Status [%1.0f]"   <switch>  (gVacStat) {channel="miio:vacuum:04EFDA6D:status#in_cleaning" }
+Switch statusDND    "DND Activated"    (gVacStat) {channel="miio:vacuum:04EFDA6D:status#dnd_enabled" }
+Number statusStatus    "Status [%1.0f]"  <status>  (gVacStat) {channel="miio:vacuum:04EFDA6D:status#state"}
+
+Number consumableMain    "Main Brush [%1.0f]"    (gVacCons) {channel="miio:vacuum:04EFDA6D:consumables#main_brush_time"}
+Number consumableSide    "Side Brush [%1.0f]"    (gVacCons) {channel="miio:vacuum:04EFDA6D:consumables#side_brush_time"}
+Number consumableFilter    "Filter Time[%1.0f]"    (gVacCons) {channel="miio:vacuum:04EFDA6D:consumables#filter_time" }
+Number consumableSensor    "Sensor [%1.0f]"    (gVacCons) {channel="miio:vacuum:04EFDA6D:consumables#sensor_dirt_time"}
+
+Switch dndFunction   "DND Function" <moon>   (gVacDND) {channel="miio:vacuum:04EFDA6D:dnd#dnd_function"}
+String dndStart   "DND Start Time [%s]" <clock>   (gVacDND) {channel="miio:vacuum:04EFDA6D:dnd#dnd_start"}
+String dndEnd   "DND End Time [%s]"   <clock-on>  (gVacDND) {channel="miio:vacuum:04EFDA6D:dnd#dnd_end"}
+
+Number historyArea    "Total Cleaned Area [%1.0fm²]" <zoom>    (gVacHist) {channel="miio:vacuum:04EFDA6D:history#total_clean_area"}
+String historyTime    "Total Clean Time [%s]"   <clock>     (gVacHist) {channel="miio:vacuum:04EFDA6D:history#total_clean_time"}
+Number historyCount    "Total # Cleanings [%1.0f]"  <office>  (gVacHist) {channel="miio:vacuum:04EFDA6D:history#total_clean_count"}
+
+Switch actionVacuum "Vacuum" (gVac) <fan> {channel="miio:vacuum:04EFDA6D:actions#vacuum"} ["Switchable"]
