@@ -1,4 +1,5 @@
 local kube = import "kube.libsonnet";
+local utils = import "utils.libsonnet";
 
 {
   namespace:: {metadata+: {namespace: "rook-ceph-system"}},
@@ -122,7 +123,7 @@ local kube = import "kube.libsonnet";
       },
       {
         // NB: This is not in upstream.  Possibly workaround for:
-          //  failed to run operator. failed to list legacy volume attachments: volumeattachments.rook.io is forbidden: User "system:serviceaccount:rook-ceph-system:rook-ceph-system" cannot list volumeattachments.rook.io in the namespace "rook-ceph-system"
+        //  failed to run operator. failed to list legacy volume attachments: volumeattachments.rook.io is forbidden: User "system:serviceaccount:rook-ceph-system:rook-ceph-system" cannot list volumeattachments.rook.io in the namespace "rook-ceph-system"
         // and
         //    op-cluster: failed finalizer for cluster. failed to get volume attachments for operator namespace rook-ceph-system: volumes.rook.io is forbidden: User "system:serviceaccount:rook-ceph-system:rook-ceph-system" cannot list volumes.rook.io in the namespace "rook-ceph-system"
         // and
@@ -168,6 +169,7 @@ local kube = import "kube.libsonnet";
             config: kube.EmptyDirVolume(),
             configdir: kube.EmptyDirVolume(),
           },
+          nodeSelector+: utils.archSelector("amd64"),
           containers_+: {
             operator: kube.Container("operator") {
               image: "rook/ceph:v0.8.3",
