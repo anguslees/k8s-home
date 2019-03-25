@@ -417,7 +417,7 @@ local version = "2.150.3-alpine";
                 periodSeconds: 60,
               },
               resources: {
-                limits: {cpu: "1", memory: "1.2Gi"},
+                limits: {cpu: "1", memory: "1.5Gi"},
                 requests: {cpu: "10m", memory: "1Gi"},
               },
               volumeMounts_+: {
