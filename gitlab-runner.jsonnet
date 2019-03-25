@@ -82,7 +82,7 @@ local utils = import "utils.libsonnet";
                           /entrypoint register --non-interactive \
                             --executor kubernetes \
                             --tag-list linux,private,k8s \
-                            --url https://gitlab.com/
+                            --url https://gitlab.com/ci
 
                           exec /entrypoint run --user=gitlab-runner \
                             --working-directory=/home/gitlab-runner
@@ -108,7 +108,7 @@ local utils = import "utils.libsonnet";
                 KUBERNETES_IMAGE: "bitnami/minideb:stretch",
                 KUBERNETES_PRIVILEGED: "false",
                 KUBERNETES_NAMESPACE: kube.FieldRef("metadata.namespace"),
-                KUBERNETES_CPU_LIMIT: 2,
+                KUBERNETES_CPU_LIMIT: "2",
                 KUBERNETES_MEMORY_LIMIT: "1Gi",
                 KUBERNETES_CPU_REQUEST: "0",
                 KUBERNETES_MEMORY_REQUEST: "256Ki",
