@@ -42,7 +42,6 @@
 
   webcache: import "webcache.jsonnet",
   mail: import "mail.jsonnet",
-  staticweb: import "staticweb.jsonnet",
   cloudprint: import "cloudprint.jsonnet",
   echoheaders: import "echoheaders.jsonnet",
   jenkins: (import "jenkins.jsonnet") {
