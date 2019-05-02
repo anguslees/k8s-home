@@ -281,6 +281,21 @@ local sshKeys = [
         initrd ${base-url}/coreos_production_pxe_image.cpio.gz
         boot
 	|||,
+      // Just because I can ...
+      "winpe.ipxe": |||
+        #!ipxe
+        # See http://ipxe.org/howto/winpe
+        # Local IPFS copy
+        set base-url http://ipfs.k.lan/ipfs/QmTPQ6aeZtk2EwHumbGJFqBeKiNUJidzs586uMj7kuBynn
+        cpuid --ext 29 && set arch amd64 || set arch x86
+        # http://git.ipxe.org/releases/wimboot/wimboot-latest.zip
+        # This is wimboot-2.6.0-signed
+        kernel http://ipfs.k.lan/ipfs/QmZemVSA6ub1pN2jUfcNFMLbDfpKFjcWqTustK6sXcQ2eq/wimboot
+        initrd ${base-url}/${arch}/bcd BCD
+        initrd ${base-url}/${arch}/boot.sdi boot.sdi
+        initrd ${base-url}/${arch}/boot.wim boot.wim
+        boot
+      |||,
       "coreos-kube.ign": kubecfg.manifestJson($.ignition_config),
     },
   },
@@ -389,6 +404,7 @@ local sshKeys = [
               ] + std.flattenArrays([[
                 "--pxe-service=tag:!ipxe,%s,Boot to iPXE,ipxe,%s" % [csa, tftpserver],
                 "--pxe-service=tag:ipxe,%s,Run boot.ipxe,%s/boot.ipxe" % [csa, http_url],
+                "--pxe-service=tag:ipxe,%s,Boot WinPE,%s/winpe.ipxe" % [csa, http_url],
                 "--pxe-service=tag:ipxe,%s,Continue local boot,0" % csa,
               ] for csa in ["x86PC", "X86-64_EFI", "BC_EFI"]]),
 
