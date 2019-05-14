@@ -9,7 +9,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local version = "v1.10.12";
+local version = "v1.10.13";
 
 local externalHostname = "kube.lan";
 local apiServer = "https://%s:6443" % [externalHostname];
@@ -120,109 +120,116 @@ local labelSelector(labels) = {
     },
   },
 
-  apiserver: kube.DaemonSet("kube-apiserver") + $.namespace {
-    local this = self,
-    spec+: {
-      template+: utils.CriticalPodSpec {
-        metadata+: {
-          annotations+: {
-            "checkpointer.alpha.coreos.com/checkpoint": "true",
-          },
-        },
-        spec+: {
-          hostNetwork: true,
-          dnsPolicy: "ClusterFirstWithHostNet",
-          // Moved to a nodeAffinity rule, to workaround a limitation
-          // with pod-checkpointer (or arguably kubelet).
-          //nodeSelector+: {"node-role.kubernetes.io/master": ""},
-          affinity+: {
-            nodeAffinity+: {
-              requiredDuringSchedulingIgnoredDuringExecution+: {
-                nodeSelectorTerms: [
-                  labelSelector({
-                    "node-role.kubernetes.io/master": "",
-                  })
-                ],
-              },
+  apiserver: {
+    pdb: kube.PodDisruptionBudget("apiserver") + $.namespace {
+      target_pod: $.apiserver.deploy.spec.template,
+      spec+: {minAvailable: 1},
+    },
+
+    deploy: kube.DaemonSet("kube-apiserver") + $.namespace {
+      local this = self,
+      spec+: {
+        template+: utils.CriticalPodSpec {
+          metadata+: {
+            annotations+: {
+              "checkpointer.alpha.coreos.com/checkpoint": "true",
             },
           },
-          securityContext+: {
-            runAsNonRoot: true,
-            runAsUser: 65534,
-          },
-          automountServiceAccountToken: false,
-          tolerations+: utils.toleratesMaster,
-          volumes_+: {
-            certs: kube.HostPathVolume("/etc/kubernetes/pki", "DirectoryOrCreate"),
-            cacerts: kube.HostPathVolume("/etc/ssl/certs", "DirectoryOrCreate"),
-          },
-          containers_+: {
-            apiserver: kube.Container("apiserver") {
-              image: "k8s.gcr.io/kube-apiserver:%s" % [version],
-              command: ["kube-apiserver"],
-              args_+: {
-                "endpoint-reconciler-type": "lease",
-                "enable-bootstrap-token-auth": "true",
-                "kubelet-preferred-address-types": "InternalIP,ExternalIP,Hostname",
-                "enable-admission-plugins": "NodeRestriction",
-                // Flag --etcd-quorum-read has been deprecated, This flag is deprecated and the ability to switch off quorum read will be removed in a future release.
-                "etcd-quorum-read": "true",
-                "allow-privileged": "true",
-                "service-cluster-ip-range": "10.96.0.0/12",
-                // Flag --insecure-port has been deprecated, This flag will be removed in a future version.
-                "insecure-port": "0",
-                "secure-port": "6443",
-                "authorization-mode": "Node,RBAC",
-                "etcd-servers": "http://127.0.0.1:2379",
-                "advertise-address": "$(POD_IP)",
-                "external-hostname": externalHostname,
+          spec+: {
+            hostNetwork: true,
+            dnsPolicy: "ClusterFirstWithHostNet",
+            // Moved to a nodeAffinity rule, to workaround a limitation
+            // with pod-checkpointer (or arguably kubelet).
+            //nodeSelector+: {"node-role.kubernetes.io/master": ""},
+            affinity+: {
+              nodeAffinity+: {
+                requiredDuringSchedulingIgnoredDuringExecution+: {
+                  nodeSelectorTerms: [
+                    labelSelector({
+                      "node-role.kubernetes.io/master": "",
+                    })
+                  ],
+                },
+              },
+            },
+            securityContext+: {
+              runAsNonRoot: true,
+              runAsUser: 65534,
+            },
+            automountServiceAccountToken: false,
+            tolerations+: utils.toleratesMaster,
+            volumes_+: {
+              certs: kube.HostPathVolume("/etc/kubernetes/pki", "DirectoryOrCreate"),
+              cacerts: kube.HostPathVolume("/etc/ssl/certs", "DirectoryOrCreate"),
+            },
+            containers_+: {
+              apiserver: kube.Container("apiserver") {
+                image: "k8s.gcr.io/kube-apiserver:%s" % [version],
+                command: ["kube-apiserver"],
+                args_+: {
+                  "endpoint-reconciler-type": "lease",
+                  "enable-bootstrap-token-auth": "true",
+                  "kubelet-preferred-address-types": "InternalIP,ExternalIP,Hostname",
+                  "enable-admission-plugins": "NodeRestriction",
+                  // Flag --etcd-quorum-read has been deprecated, This flag is deprecated and the ability to switch off quorum read will be removed in a future release.
+                  "etcd-quorum-read": "true",
+                  "allow-privileged": "true",
+                  "service-cluster-ip-range": "10.96.0.0/12",
+                  // Flag --insecure-port has been deprecated, This flag will be removed in a future version.
+                  "insecure-port": "0",
+                  "secure-port": "6443",
+                  "authorization-mode": "Node,RBAC",
+                  "etcd-servers": "http://127.0.0.1:2379",
+                  "advertise-address": "$(POD_IP)",
+                  "external-hostname": externalHostname,
 
-                "watch-cache": "false",  // disable to conserve precious ram
-                //"default-watch-cache-size": "0", // default 100
-                "request-timeout": "5m",
-                "max-requests-inflight": "150", // ~15 per 25-30 pods, default 400
-                "target-ram-mb": "300", // ~60MB per 20-30 pods
+                  "watch-cache": "false",  // disable to conserve precious ram
+                  //"default-watch-cache-size": "0", // default 100
+                  "request-timeout": "5m",
+                  "max-requests-inflight": "150", // ~15 per 25-30 pods, default 400
+                  "target-ram-mb": "300", // ~60MB per 20-30 pods
 
-                "kubelet-client-certificate": "/etc/kubernetes/pki/apiserver-kubelet-client.crt",
-                "kubelet-client-key": "/etc/kubernetes/pki/apiserver-kubelet-client.key",
-                "service-account-key-file": "/etc/kubernetes/pki/sa.pub",
-                "client-ca-file": "/etc/kubernetes/pki/ca.crt",
-                "proxy-client-cert-file": "/etc/kubernetes/pki/front-proxy-client.crt",
-                "proxy-client-key-file": "/etc/kubernetes/pki/front-proxy-client.key",
-                "tls-cert-file": "/etc/kubernetes/pki/apiserver.crt",
-                "tls-private-key-file": "/etc/kubernetes/pki/apiserver.key",
-                "etcd-cafile": "/etc/kubernetes/pki/etcd-ca.pem",
-                "etcd-certfile": "/etc/kubernetes/pki/etcd-apiserver-client.pem",
-                "etcd-keyfile": "/etc/kubernetes/pki/etcd-apiserver-client-key.pem",
+                  "kubelet-client-certificate": "/etc/kubernetes/pki/apiserver-kubelet-client.crt",
+                  "kubelet-client-key": "/etc/kubernetes/pki/apiserver-kubelet-client.key",
+                  "service-account-key-file": "/etc/kubernetes/pki/sa.pub",
+                  "client-ca-file": "/etc/kubernetes/pki/ca.crt",
+                  "proxy-client-cert-file": "/etc/kubernetes/pki/front-proxy-client.crt",
+                  "proxy-client-key-file": "/etc/kubernetes/pki/front-proxy-client.key",
+                  "tls-cert-file": "/etc/kubernetes/pki/apiserver.crt",
+                  "tls-private-key-file": "/etc/kubernetes/pki/apiserver.key",
+                  "etcd-cafile": "/etc/kubernetes/pki/etcd-ca.pem",
+                  "etcd-certfile": "/etc/kubernetes/pki/etcd-apiserver-client.pem",
+                  "etcd-keyfile": "/etc/kubernetes/pki/etcd-apiserver-client-key.pem",
 
-                "requestheader-extra-headers-prefix": "X-Remote-Extra-",
-                "requestheader-allowed-names": "front-proxy-client",
-                "requestheader-username-headers": "X-Remote-User",
-                "requestheader-group-headers": "X-Remote-Group",
-                "requestheader-client-ca-file": "/etc/kubernetes/pki/front-proxy-ca.crt",
-              },
-              env_+: {
-                POD_IP: kube.FieldRef("status.podIP"),
-              },
-              livenessProbe:: {  // FIXME: disabled for now
-                httpGet: {path: "/healthz", port: 6443, scheme: "HTTPS"},
-                failureThreshold: 10,
-                initialDelaySeconds: 240,
-                periodSeconds: 30,
-                successThreshold: 1,
-                timeoutSeconds: 20,
-              },
-              readinessProbe: self.livenessProbe {
-                failureThreshold: 2,
-                initialDelaySeconds: 120,
-                successThreshold: 3,
-              },
-              resources+: {
-                requests: {cpu: "250m"},
-              },
-              volumeMounts_+: {
-                certs: {mountPath: "/etc/kubernetes/pki", readOnly: true},
-                cacerts: {mountPath: "/etc/ssl/certs", readOnly: true},
+                  "requestheader-extra-headers-prefix": "X-Remote-Extra-",
+                  "requestheader-allowed-names": "front-proxy-client",
+                  "requestheader-username-headers": "X-Remote-User",
+                  "requestheader-group-headers": "X-Remote-Group",
+                  "requestheader-client-ca-file": "/etc/kubernetes/pki/front-proxy-ca.crt",
+                },
+                env_+: {
+                  POD_IP: kube.FieldRef("status.podIP"),
+                },
+                livenessProbe:: {  // FIXME: disabled for now
+                  httpGet: {path: "/healthz", port: 6443, scheme: "HTTPS"},
+                  failureThreshold: 10,
+                  initialDelaySeconds: 240,
+                  periodSeconds: 30,
+                  successThreshold: 1,
+                  timeoutSeconds: 20,
+                },
+                readinessProbe: self.livenessProbe {
+                  failureThreshold: 2,
+                  initialDelaySeconds: 120,
+                  successThreshold: 3,
+                },
+                resources+: {
+                  requests: {cpu: "250m"},
+                },
+                volumeMounts_+: {
+                  certs: {mountPath: "/etc/kubernetes/pki", readOnly: true},
+                  cacerts: {mountPath: "/etc/ssl/certs", readOnly: true},
+                },
               },
             },
           },
