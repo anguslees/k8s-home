@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local utils = import "utils.libsonnet";
 
 // aka lts-alpine
-local version = "2.150.3-alpine";
+local version = "2.164.3-alpine";
 
 {
   namespace:: {metadata+: {namespace: "jenkins"}},
@@ -347,6 +347,7 @@ local version = "2.150.3-alpine";
             secrets: kube.EmptyDirVolume(), // todo
           },
           initContainers_+: {
+            /* (disabled - I'm not managing plugins declaratively)
             // TODO: The "right" thing to do is to build a custom
             // image, rather than download these again on every
             // container restart..
@@ -361,6 +362,7 @@ local version = "2.150.3-alpine";
                 plugins: {mountPath: "/usr/share/jenkins/ref/plugins", readOnly: false},
               },
             },
+             */
           },
           containers_+: {
             jenkins: kube.Container("jenkins") {
