@@ -8,9 +8,9 @@ local arch = "amd64";
   namespace:: {metadata+: {namespace: "rook-ceph"}},
   ns: kube.Namespace($.namespace.metadata.namespace),
 
-  sa: kube.ServiceAccount("rook-ceph-cluster") + $.namespace,
+  mgrSa: kube.ServiceAccount("rook-ceph-mgr") + $.namespace,
 
-  cephCluster: kube.Role("rook-ceph-cluster") + $.namespace {
+  osdRole: kube.Role("rook-ceph-osd") + $.namespace {
     rules: [
       {
         apiGroups: [""],
@@ -20,9 +20,59 @@ local arch = "amd64";
     ],
   },
 
-  cephClusterBinding: kube.RoleBinding("rook-ceph-cluster") + $.namespace {
-    roleRef_: $.cephCluster,
-    subjects_+: [$.sa],
+  osdSa: kube.ServiceAccount("rook-ceph-osd") + $.namespace,
+
+  osdRoleBinding: kube.RoleBinding("rook-ceph-osd") + $.namespace {
+    roleRef_: $.osdRole,
+    subjects_+: [$.osdSa],
+  },
+
+  mgrSystemRole: kube.Role("rook-ceph-mgr-system") + $.namespace {
+    rules: [
+      {
+        apiGroups: [""],
+        resources: ["configmaps"],
+        verbs: ["get", "list", "watch"],
+      },
+    ],
+  },
+
+  mgrRole: kube.Role("rook-ceph-mgr") + $.namespace {
+    rules: [
+      {
+        apiGroups: [""],
+        resources: ["pods", "services"],
+        verbs: ["get", "list", "watch"],
+      },
+      {
+        apiGroups: ["batch"],
+        resources: ["jobs"],
+        verbs: ["get", "list", "watch", "create", "update", "delete"],
+      },
+      {
+        apiGroups: ["ceph.rook.io"],
+        resources: ["*"],
+        verbs: ["*"],
+      },
+    ],
+  },
+
+  mgrClusterRole: kube.ClusterRole("rook-ceph-mgr-cluster") {
+    metadata+: {
+      labels+: {operator: "rook", "storage-backend": "ceph"},
+    },
+    rules: [
+      {
+        apiGroups: [""],
+        resources: ["configmaps", "nodes", "nodes/proxy"],
+        verbs: ["get", "list", "watch"],
+      },
+    ],
+  },
+
+  mgrBinding: kube.RoleBinding("rook-ceph-mgr") + $.namespace {
+    roleRef_: $.mgrRole,
+    subjects_+: [$.mgrSa],
   },
 
   // Allow operator to create resources in this namespace too.
@@ -31,11 +81,23 @@ local arch = "amd64";
     subjects_+: [rookCephSystem.sa],
   },
 
-  cluster: rookCephSystem.Cluster("rook-ceph") + $.namespace {
+  mgrSystemBinding: kube.RoleBinding("rook-ceph-mgr-system") + rookCephSystem.namespace {
+    roleRef_: $.mgrSystemRole,
+    subjects_+: [$.mgrSa],
+  },
+
+  mgrClusterRoleBinding: kube.RoleBinding("rook-ceph-mgr-cluster") + $.namespace {
+    roleRef_: $.mgrClusterRole,
+    subjects_+: [$.mgrSa],
+  },
+
+  cluster: rookCephSystem.CephCluster("rook-ceph") + $.namespace {
     spec+: {
       // NB: Delete contents of this dir if recreating Cluster
       dataDirHostPath: "/var/lib/rook",
-      serviceAccount: $.sa.metadata.name,
+      cephVersion: {
+        image: "ceph/ceph:v13.2.5-20190410",
+      },
       mon: {
         count: 3,
         allowMultiplePerNode: false,
@@ -112,7 +174,7 @@ local arch = "amd64";
   },
 
   // Define storage pools / classes
-  replicapool: rookCephSystem.Pool("replicapool") + $.namespace {
+  replicapool: rookCephSystem.CephBlockPool("replicapool") + $.namespace {
     spec+: {
       failureDomain: "host",
       replicated: {size: 2},
@@ -123,13 +185,13 @@ local arch = "amd64";
     provisioner: "ceph.rook.io/block",
     parameters: {
       pool: $.replicapool.metadata.name,
-      clusterNamespace: $.cephCluster.metadata.namespace,
+      clusterNamespace: $.cluster.metadata.namespace,
       fstype: "ext4",
     },
   },
 
   // NB: Still needs provisioner + storageclass support in rook
-  filesystem: rookCephSystem.Filesystem("ceph-filesystem") + $.namespace {
+  filesystem: rookCephSystem.CephFilesystem("ceph-filesystem") + $.namespace {
     spec+: {
       metadataPool: {replicated: {size: 3}},
       dataPools: [{replicated: {size: 2}}],

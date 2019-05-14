@@ -5,55 +5,122 @@ local utils = import "utils.libsonnet";
   namespace:: {metadata+: {namespace: "rook-ceph-system"}},
   ns: kube.Namespace($.namespace.metadata.namespace),
 
-  clusterCRD: kube.CustomResourceDefinition("ceph.rook.io", "v1beta1", "Cluster") {
+  cephClusterCRD: kube.CustomResourceDefinition("ceph.rook.io", "v1", "CephCluster") {
     spec+: {
-      names+: {
-        shortNames: ["rcc"],
+      validation: {
+        openAPIV3Schema: {
+          properties: {
+            spec: {
+              properties: {
+                cephVersion: {
+                  properties: {
+                    allowUnsupported: {type: "boolean"},
+                    image: {type: "string"},
+                    name: {
+                      pattern: @"^(luminous|mimic|nautilus)$",
+                      type: "string",
+                    },
+                  },
+                },
+                dashboard: {
+                  properties: {
+                    enabled: {type: "boolean"},
+                    urlPrefix: {type: "string"},
+                  },
+                },
+                dataDirHostPath: {
+                  pattern: @"^/(\S+)",
+                  type: "string",
+                },
+                mon: {
+                  properties: {
+                    allowMultiplePerNode: {type: "boolean"},
+                    count: {maximum: 9, minimum: 1, type: "integer"},
+                  },
+                  required: ["count"],
+                },
+                network: {
+                  properties: {
+                    hostNetwork: {type: "boolean"},
+                  },
+                },
+                storage: {
+                  properties: {
+                    nodes: {type: "array", items: {}},
+                    useAllDevices: {},
+                    useAllNodes: {type: "boolean"},
+                  },
+                },
+              },
+              required: ["mon"],
+            },
+          },
+        },
       },
+      additionalPrinterColumns: [
+        {
+          name: "DataDirHostPath",
+          type: "string",
+          description: "Directory used on the K8s nodes",
+          JSONPath: ".spec.dataDirHostPath",
+        },
+        {
+          name: "MonCount",
+          type: "string",
+          description: "Number of MONs",
+          JSONPath: ".spec.mon.count",
+        },
+        {
+          name: "Age",
+          type: "date",
+          JSONPath: ".metadata.creationTimestamp",
+        },
+        {
+          name: "State",
+          type: "string",
+          description: "Current State",
+          JSONPath: ".status.state",
+        },
+      ],
     },
   },
 
-  Cluster(name):: kube._Object("ceph.rook.io/v1beta1", "Cluster", name),
+  CephCluster(name):: kube._Object("ceph.rook.io/v1", "CephCluster", name),
 
-  filesystemCRD: kube.CustomResourceDefinition("ceph.rook.io", "v1beta1", "Filesystem") {
+  cephFilesystemCRD: kube.CustomResourceDefinition("ceph.rook.io", "v1", "CephFilesystem") {
     spec+: {
-      names+: {
-        shortNames: ["rcfs"],
-      },
+      additionalPrinterColumns: [
+        {
+          name: "MdsCount",
+          type: "string",
+          description: "Number of MDSs",
+          JSONPath: ".spec.metadataServer.activeCount",
+        },
+        {
+          name: "Age",
+          type: "date",
+          JSONPath: ".metadata.creationTimestamp",
+        },
+      ],
     },
   },
 
-  Filesystem(name):: kube._Object("ceph.rook.io/v1beta1", "Filesystem", name),
+  CephFilesystem(name):: kube._Object("ceph.rook.io/v1", "CephFilesystem", name),
 
-  objectstoreCRD: kube.CustomResourceDefinition("ceph.rook.io", "v1beta1", "ObjectStore") {
-    spec+: {
-      names+: {
-        shortNames: ["rco"],
-      },
-    },
+  cephObjectStoreCRD: kube.CustomResourceDefinition("ceph.rook.io", "v1", "CephObjectStore") {
   },
 
-  ObjectStore(name):: kube._Object("ceph.rook.io/v1beta1", "ObjectStore", name),
+  CephObjectStore(name):: kube._Object("ceph.rook.io/v1", "CephObjectStore", name),
 
-  poolCRD: kube.CustomResourceDefinition("ceph.rook.io", "v1beta1", "Pool") {
-    spec+: {
-      names+: {
-        shortNames: ["rcp"],
-      },
-    },
+  cephObjectStoreUserCRD: kube.CustomResourceDefinition("ceph.rook.io", "v1", "CephObjectStoreUser") {
   },
 
-  Pool(name):: kube._Object("ceph.rook.io/v1beta1", "Pool", name),
+  CephObjectStoreUser(name):: kube._Object("ceph.rook.io/v1", "CephObjectStoreUser", name),
 
-  volumeCRD: kube.CustomResourceDefinition("rook.io", "v1alpha2", "Volume") {
-    spec+: {
-      names+: {
-        shortNames: ["rv"],
-      },
-    },
+  cephBlockPoolCRD: kube.CustomResourceDefinition("ceph.rook.io", "v1", "CephBlockPool") {
   },
 
-  Volume(name):: kube._Object("ceph.rook.io/v1beta1", "Volume", name),
+  CephBlockPool(name):: kube._Object("ceph.rook.io/v1", "CephBlockPool", name),
 
   cephClusterMgmt: kube.ClusterRole("rook-ceph-cluster-mgmt") {
     metadata+: {
@@ -62,7 +129,7 @@ local utils = import "utils.libsonnet";
     rules: [
       {
         apiGroups: [""],
-        resources: ["secrets", "pods", "services", "configmaps"],
+        resources: ["secrets", "pods", "pods/log", "services", "configmaps"],
         verbs: ["get", "list", "watch", "patch", "create", "update", "delete"],
       },
       {
@@ -172,7 +239,7 @@ local utils = import "utils.libsonnet";
           nodeSelector+: utils.archSelector("amd64"),
           containers_+: {
             operator: kube.Container("operator") {
-              image: "rook/ceph:v0.8.3",
+              image: "rook/ceph:v0.9.3",
               args: ["ceph", "operator"],
               volumeMounts_+: {
                 config: {mountPath: "/var/lib/rook"},
