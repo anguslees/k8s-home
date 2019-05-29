@@ -42,13 +42,13 @@ Go to k8s config section.
 *** On nodes (containos):
 
 Cert hash: (on master) `openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex`
-Get new token: (on master) `kubeadm token create --ttl 12h --groups system:bootstrappers:kubeadm:default-node-token`
-(explicit --groups is https://github.com/kubernetes/kubeadm/issues/483)
+Get new token: (on master) `kubeadm token create --ttl 12h --print-join-command`
 
 kubeadm join \
   --node-name=$(cat /etc/machine-id) \
   --discovery-token-ca-cert-hash=sha256:$certhash \
-  --token $token kube.lan:6443
+  --token $token kube.lan:6443 \
+  --ignore-preflight-errors=Swap,CRI
 
 **** bananapi fyi:
 
@@ -177,7 +177,7 @@ ETCD_NAME=kmaster3; POD_IP=192.168.0.128; docker run --rm --net=host -v /var/lib
 ** Upgrade
 
 kubeadm binaries available from
-https://storage.googleapis.com/kubernetes-release/release/$release/bin/linux/$arch/kubeadm
+https://dl.k8s.io/release/$release/bin/linux/$arch/kubeadm
 
 NB: control jobs first, then kubelets
 Also: ensure to regenerate/rotate keys as part of upgrade - they have
