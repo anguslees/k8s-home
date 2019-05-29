@@ -1,6 +1,9 @@
 local kube = import "kube.libsonnet";
 local utils = import "utils.libsonnet";
 
+// https://hub.docker.com/r/rook/ceph/tags
+local version = "v1.0.1";
+
 {
   namespace:: {metadata+: {namespace: "rook-ceph-system"}},
   ns: kube.Namespace($.namespace.metadata.namespace),
@@ -35,7 +38,11 @@ local utils = import "utils.libsonnet";
                 mon: {
                   properties: {
                     allowMultiplePerNode: {type: "boolean"},
-                    count: {maximum: 9, minimum: 1, type: "integer"},
+                    // kubecfg/apimachinery conversion bug:
+                    // INFO  Updating customresourcedefinitions cephclusters.ceph.rook.io
+                    // WARNING failed to parse CustomResourceDefinition: cannot convert int64 to float64
+                    //count: {maximum: 9, minimum: 1, type: "integer"},
+                    count: {type: "integer"},
                   },
                   required: ["count"],
                 },
@@ -122,6 +129,27 @@ local utils = import "utils.libsonnet";
 
   CephBlockPool(name):: kube._Object("ceph.rook.io/v1", "CephBlockPool", name),
 
+  volumeCRD: kube.CustomResourceDefinition("rook.io", "v1alpha2", "Volume") {
+    spec+: {
+      names+: {shortNames: ["rv"]},
+    },
+  },
+
+  nfsCRD: kube.CustomResourceDefinition("ceph.rook.io", "v1", "CephNFS") {
+    spec+: {
+      names+: {
+        plural: "cephnfses",
+        shortNames+: ["nfs"],
+      },
+    },
+  },
+
+  sa: kube.ServiceAccount("rook-ceph-system") + $.namespace {
+    metadata+: {
+      labels+: {operator: "rook", "storage-backend": "ceph"},
+    },
+  },
+
   cephClusterMgmt: kube.ClusterRole("rook-ceph-cluster-mgmt") {
     metadata+: {
       labels+: {operator: "rook", "storage-backend": "ceph"},
@@ -134,7 +162,7 @@ local utils = import "utils.libsonnet";
       },
       {
         apiGroups: ["extensions", "apps"],
-        resources: ["deployments", "daemonsets", "replicasets"],
+        resources: ["deployments", "daemonsets"],
         verbs: ["get", "list", "watch", "create", "update", "delete"],
       },
     ],
@@ -147,12 +175,12 @@ local utils = import "utils.libsonnet";
     rules: [
       {
         apiGroups: [""],
-        resources: ["pods", "configmaps"],
+        resources: ["pods", "configmaps", "services"],
         verbs: ["get", "list", "watch", "patch", "create", "update", "delete"],
       },
       {
         apiGroups: ["extensions", "apps"],
-        resources: ["daemonsets"],
+        resources: ["daemonsets", "statefulsets"],
         verbs: ["get", "list", "watch", "create", "update", "delete"],
       },
     ],
@@ -170,7 +198,7 @@ local utils = import "utils.libsonnet";
       },
       {
         apiGroups: [""],
-        resources: ["events", "persistentvolumes", "persistentvolumeclaims"],
+        resources: ["events", "persistentvolumes", "persistentvolumeclaims", "endpoints"],
         verbs: ["get", "list", "watch", "patch", "create", "update", "delete"],
       },
       {
@@ -184,28 +212,21 @@ local utils = import "utils.libsonnet";
         verbs: ["get", "list", "watch", "create", "update", "delete"],
       },
       {
-        apiGroups: ["ceph.rook.io"],
+        apiGroups: ["ceph.rook.io", "rook.io"],
         resources: ["*"],
         verbs: ["*"],
-      },
-      {
-        // NB: This is not in upstream.  Possibly workaround for:
-        //  failed to run operator. failed to list legacy volume attachments: volumeattachments.rook.io is forbidden: User "system:serviceaccount:rook-ceph-system:rook-ceph-system" cannot list volumeattachments.rook.io in the namespace "rook-ceph-system"
-        // and
-        //    op-cluster: failed finalizer for cluster. failed to get volume attachments for operator namespace rook-ceph-system: volumes.rook.io is forbidden: User "system:serviceaccount:rook-ceph-system:rook-ceph-system" cannot list volumes.rook.io in the namespace "rook-ceph-system"
-        // and
-        //    MountVolume.SetUp failed for volume "pvc-84d2422b-a758-11e8-99a2-02030782ac80" : mount command failed, status: Failure, reason: Rook: Mount volume failed: failed to create volume CRD pvc-84d2422b-a758-11e8-99a2-02030782ac80. volumes.rook.io is forbidden: User "system:serviceaccount:rook-ceph-system:rook-ceph-system" cannot create volumes.rook.io in the namespace "rook-ceph-system"
-        apiGroups: ["rook.io"],
-        resources: ["volumeattachments", "volumes"],
-        verbs: ["get", "list", "watch", "patch", "create", "update", "delete"],
       },
     ],
   },
 
-  sa: kube.ServiceAccount("rook-ceph-system") + $.namespace {
-    metadata+: {
-      labels+: {operator: "rook", "storage-backend": "ceph"},
-    },
+  mgrSystemRole: kube.ClusterRole("rook-ceph-mgr-system") {
+    rules: [
+      {
+        apiGroups: [""],
+        resources: ["configmaps"],
+        verbs: ["get", "list", "watch"],
+      },
+    ],
   },
 
   cephSystemBinding: kube.RoleBinding("rook-ceph-system") + $.namespace {
@@ -239,7 +260,7 @@ local utils = import "utils.libsonnet";
           nodeSelector+: utils.archSelector("amd64"),
           containers_+: {
             operator: kube.Container("operator") {
-              image: "rook/ceph:v0.9.3",
+              image: "rook/ceph:" + version,
               args: ["ceph", "operator"],
               volumeMounts_+: {
                 config: {mountPath: "/var/lib/rook"},
@@ -250,8 +271,10 @@ local utils = import "utils.libsonnet";
                 ROOK_ALLOW_MULTIPLE_FILESYSTEMS: "false",
                 ROOK_LOG_LEVEL: "INFO",
                 ROOK_MON_HEALTHCHECK_INTERVAL: "45s",
-                ROOK_MON_OUT_TIMEOUT: "300s",
+                ROOK_MON_OUT_TIMEOUT: "600s",
                 ROOK_HOSTPATH_REQUIRES_PRIVILEGED: "false",
+                ROOK_ENABLE_SELINUX_RELABELING: "false",
+                ROOK_ENABLE_FSGROUP: "true",
                 NODE_NAME: kube.FieldRef("spec.nodeName"),
                 POD_NAME: kube.FieldRef("metadata.name"),
                 POD_NAMESPACE: kube.FieldRef("metadata.namespace"),

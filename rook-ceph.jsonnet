@@ -4,6 +4,9 @@ local rookCephSystem = import "rook-ceph-system.jsonnet";
 
 local arch = "amd64";
 
+// https://hub.docker.com/r/ceph/ceph/tags
+local cephVersion = "v13.2.5-20190410";
+
 {
   namespace:: {metadata+: {namespace: "rook-ceph"}},
   ns: kube.Namespace($.namespace.metadata.namespace),
@@ -25,16 +28,6 @@ local arch = "amd64";
   osdRoleBinding: kube.RoleBinding("rook-ceph-osd") + $.namespace {
     roleRef_: $.osdRole,
     subjects_+: [$.osdSa],
-  },
-
-  mgrSystemRole: kube.Role("rook-ceph-mgr-system") + $.namespace {
-    rules: [
-      {
-        apiGroups: [""],
-        resources: ["configmaps"],
-        verbs: ["get", "list", "watch"],
-      },
-    ],
   },
 
   mgrRole: kube.Role("rook-ceph-mgr") + $.namespace {
@@ -70,6 +63,16 @@ local arch = "amd64";
     ],
   },
 
+  mgrSystemBinding: kube.RoleBinding("rook-ceph-mgr-system") + $.namespace {
+    roleRef_: rookCephSystem.mgrSystemRole,
+    subjects_+: [$.mgrSa],
+  },
+
+  mgrClusterRoleBinding: kube.ClusterRoleBinding("rook-ceph-mgr-cluster") {
+    roleRef_: $.mgrClusterRole,
+    subjects_+: [$.mgrSa],
+  },
+
   mgrBinding: kube.RoleBinding("rook-ceph-mgr") + $.namespace {
     roleRef_: $.mgrRole,
     subjects_+: [$.mgrSa],
@@ -81,22 +84,12 @@ local arch = "amd64";
     subjects_+: [rookCephSystem.sa],
   },
 
-  mgrSystemBinding: kube.RoleBinding("rook-ceph-mgr-system") + rookCephSystem.namespace {
-    roleRef_: $.mgrSystemRole,
-    subjects_+: [$.mgrSa],
-  },
-
-  mgrClusterRoleBinding: kube.RoleBinding("rook-ceph-mgr-cluster") + $.namespace {
-    roleRef_: $.mgrClusterRole,
-    subjects_+: [$.mgrSa],
-  },
-
   cluster: rookCephSystem.CephCluster("rook-ceph") + $.namespace {
     spec+: {
       // NB: Delete contents of this dir if recreating Cluster
       dataDirHostPath: "/var/lib/rook",
       cephVersion: {
-        image: "ceph/ceph:v13.2.5-20190410",
+        image: "ceph/ceph:" + cephVersion,
       },
       mon: {
         count: 3,
@@ -134,6 +127,14 @@ local arch = "amd64";
 
   // Expose rook-ceph-mgr-dashboard outside cluster
   ing: utils.Ingress("ceph-dashboard") + $.namespace {
+    metadata+: {
+      annotations+: {
+        "nginx.ingress.kubernetes.io/backend-protocol": "HTTPS",
+        "nginx.ingress.kubernetes.io/server-snippet": |||
+          proxy_ssl_verify off;
+        |||,
+      },
+    },
     spec+: {
       rules: [{
         host: "ceph.k.lan",
@@ -142,7 +143,7 @@ local arch = "amd64";
             path: "/",
             backend: {
               serviceName: "rook-ceph-mgr-dashboard",
-              servicePort: 7000,
+              servicePort: 8443,
             },
           }],
         },
