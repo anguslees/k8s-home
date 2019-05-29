@@ -95,6 +95,10 @@ local archNodeSelector(a) = {nodeSelector+: {"beta.kubernetes.io/arch": a}};
             update_operator: kube.Container("update-operator") {
               image: "quay.io/coreos/container-linux-update-operator:%s" % version,
               command: ["/bin/update-operator"],
+              args_+: {
+                "before-reboot-annotations": "ceph-before-reboot-check",
+                "after-reboot-annotations": "ceph-after-reboot-check",
+              },
               env_+: {
                 POD_NAMESPACE: kube.FieldRef("metadata.namespace"),
               },
