@@ -541,6 +541,11 @@ local labelSelector(labels) = {
           resources: ["endpoints", "services", "pods", "namespaces"],
           verbs: ["list", "watch"],
         },
+        {
+          apiGroups: [""],
+          resources: ["nodes"],
+          verbs: ["get"],
+        },
       ],
     },
 
@@ -553,7 +558,7 @@ local labelSelector(labels) = {
       subjects_+: [$.coreDNS.sa],
     },
 
-    config: kube.ConfigMap("coredns") + $.namespace {
+    config: utils.HashedConfigMap("coredns") + $.namespace {
       data+: {
         Corefile: |||
           .:53 {
@@ -570,13 +575,14 @@ local labelSelector(labels) = {
             prometheus :9153
             proxy . /etc/resolv.conf
             cache 30
-            reload
+            loop
+            loadbalance
+            # Note no 'reload' since we use HashedConfigMap
           }
         ||| % serviceClusterCidr,
       },
     },
 
-    // disabled..
     svc: kube.Service("coredns") + $.namespace {
       metadata+: {
         labels+: {
