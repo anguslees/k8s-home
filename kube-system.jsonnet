@@ -618,6 +618,7 @@ local labelSelector(labels) = {
                   items+: [{key: "Corefile", path: "Corefile"}],
                 },
               },
+              tmp: kube.EmptyDirVolume(),
             },
             containers_+: {
               coredns: kube.Container("coredns") {
@@ -631,6 +632,9 @@ local labelSelector(labels) = {
                 },
                 volumeMounts_+: {
                   config: {mountPath: "/etc/coredns", readOnly: true},
+                  // Workaround https://github.com/coredns/deployment/pull/138
+                  // Remove on coredns >=1.4.0
+                  tmp: {mountPath: "/tmp"},
                 },
                 ports_+: {
                   dns: {containerPort: 53, protocol: "UDP"},
