@@ -9,11 +9,13 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local version = "v1.10.13";
+local version = "v1.11.10";
 
 local externalHostname = "kube.lan";
 local apiServer = "https://%s:6443" % [externalHostname];
 local clusterCidr = "10.244.0.0/16";
+local serviceClusterCidr = "10.96.0.0/12";
+local dnsIP = "10.96.0.10";
 
 local labelSelector(labels) = {
   matchExpressions: [
@@ -70,48 +72,72 @@ local labelSelector(labels) = {
     },
   },
 
-  kube_proxy: kube.DaemonSet("kube-proxy") + $.namespace {
-    spec+: {
-      template+: utils.CriticalPodSpec + utils.PromScrape(10249) {
-        spec+: {
-          dnsPolicy: "ClusterFirst",
-          hostNetwork: true,
-          serviceAccountName: "kube-proxy",
-          tolerations: utils.toleratesMaster + [{
-            effect: "NoSchedule",
-            key: "node.cloudprovider.kubernetes.io/uninitialized",
-            value: "true",
-          }],
-          volumes_+: {
-            kubeconfig: kube.ConfigMapVolume($.kubeconfig_in_cluster),
-            xtables_lock: kube.HostPathVolume("/run/xtables.lock", "FileOrCreate"),
-            lib_modules: kube.HostPathVolume("/lib/modules"),
-          },
-          containers_: {
-            kube_proxy: kube.Container("kube-proxy") {
-              image: "k8s.gcr.io/kube-proxy:%s" % [version],
-              command: ["kube-proxy"],
-              args_+: {
-                "kubeconfig": "/etc/kubernetes/kubeconfig.conf",
-                "cluster-cidr": clusterCidr,
-                "hostname-override": "$(NODE_NAME)",
-                // https://github.com/kubernetes/kubernetes/issues/53754
-                //"metrics-bind-address": "$(POD_IP):10249",
-              },
-              env_+: {
-                NODE_NAME: kube.FieldRef("spec.nodeName"),
-                POD_IP: kube.FieldRef("status.podIP"),
-              },
-              ports_+: {
-                metrics: {containerPort: 10249},
-              },
-              securityContext: {
-                privileged: true,
-              },
-              volumeMounts_+: {
-                kubeconfig: {mountPath: "/etc/kubernetes", readOnly: true},
-                xtables_lock: {mountPath: "/run/xtables.lock"},
-                lib_modules: {mountPath: "/lib/modules", readOnly: true},
+  kube_proxy: {
+    sa: kube.ServiceAccount("kube-proxy") + $.namespace,
+
+    // This duplicates kubeadm:node-proxier
+    binding: kube.ClusterRoleBinding("kube-proxy") {
+      roleRef: {
+        apiGroup: "rbac.authorization.k8s.io",
+        kind: "ClusterRole",
+        name: "system:node-proxier",
+      },
+      subjects_: [$.kube_proxy.sa],
+    },
+
+    deploy: kube.DaemonSet("kube-proxy") + $.namespace {
+      spec+: {
+        template+: utils.CriticalPodSpec + utils.PromScrape(10249) {
+          spec+: {
+            dnsPolicy: "ClusterFirst",
+            hostNetwork: true,
+            serviceAccountName: $.kube_proxy.sa.metadata.name,
+            tolerations: utils.toleratesMaster + [{
+              effect: "NoSchedule",
+              key: "node.cloudprovider.kubernetes.io/uninitialized",
+              value: "true",
+            }],
+            volumes_+: {
+              kubeconfig: kube.ConfigMapVolume($.kubeconfig_in_cluster),
+              xtables_lock: kube.HostPathVolume("/run/xtables.lock", "FileOrCreate"),
+              lib_modules: kube.HostPathVolume("/lib/modules"),
+            },
+            containers_: {
+              kube_proxy: kube.Container("kube-proxy") {
+                image: "k8s.gcr.io/kube-proxy:%s" % [version],
+                command: ["kube-proxy"],
+                args_+: {
+                  "kubeconfig": "/etc/kubernetes/kubeconfig.conf",
+                  "proxy-mode": "iptables", // todo: migrate to ipvs
+                  "cluster-cidr": clusterCidr,
+                  "hostname-override": "$(NODE_NAME)",
+                  // https://github.com/kubernetes/kubernetes/issues/53754
+                  // Fixed in k8s v1.14
+                  //"metrics-bind-address": "$(POD_IP)",
+                  //"metrics-port": "10249",
+                  "healthz-bind-address": "$(POD_IP)",
+                  "healthz-port": "10256",
+                },
+                env_+: {
+                  NODE_NAME: kube.FieldRef("spec.nodeName"),
+                  POD_IP: kube.FieldRef("status.podIP"),
+                },
+                ports_+: {
+                  metrics: {containerPort: 10249},
+                },
+                securityContext: {
+                  privileged: true,
+                },
+                volumeMounts_+: {
+                  kubeconfig: {mountPath: "/etc/kubernetes", readOnly: true},
+                  xtables_lock: {mountPath: "/run/xtables.lock"},
+                  lib_modules: {mountPath: "/lib/modules", readOnly: true},
+                },
+                livenessProbe: {
+                  httpGet: {path: "/healthz", port: 10256, scheme: "HTTP"},
+                  initialDelaySeconds: 30,
+                  failureThreshold: 3,
+                },
               },
             },
           },
@@ -171,10 +197,9 @@ local labelSelector(labels) = {
                   "enable-bootstrap-token-auth": "true",
                   "kubelet-preferred-address-types": "InternalIP,ExternalIP,Hostname",
                   "enable-admission-plugins": "NodeRestriction",
-                  // Flag --etcd-quorum-read has been deprecated, This flag is deprecated and the ability to switch off quorum read will be removed in a future release.
-                  "etcd-quorum-read": "true",
+                  //"anonymous-auth": "false", bootkube has this, but not kubeadm
                   "allow-privileged": "true",
-                  "service-cluster-ip-range": "10.96.0.0/12",
+                  "service-cluster-ip-range": serviceClusterCidr,
                   // Flag --insecure-port has been deprecated, This flag will be removed in a future version.
                   "insecure-port": "0",
                   "secure-port": "6443",
@@ -213,7 +238,7 @@ local labelSelector(labels) = {
                 livenessProbe:: {  // FIXME: disabled for now
                   httpGet: {path: "/healthz", port: 6443, scheme: "HTTPS"},
                   failureThreshold: 10,
-                  initialDelaySeconds: 240,
+                  initialDelaySeconds: 300,
                   periodSeconds: 30,
                   successThreshold: 1,
                   timeoutSeconds: 20,
@@ -298,6 +323,7 @@ local labelSelector(labels) = {
                   "controllers": "*,bootstrapsigner,tokencleaner",
                   "allocate-node-cidrs": "true",
                   "cluster-cidr": clusterCidr,
+                  "service-cluster-ip-range": serviceClusterCidr,
                   "node-cidr-mask-size": "24",
                   //"cloud-provider"
 
@@ -492,6 +518,145 @@ local labelSelector(labels) = {
                   kubeconfig: {mountPath: "/etc/checkpointer"},
                   etc_k8s: {mountPath: "/etc/kubernetes"},
                   var_run: {mountPath: "/var/run"},
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+
+  coreDNS: {
+    sa: kube.ServiceAccount("coredns") + $.namespace,
+
+    role: kube.ClusterRole("system:coredns") {
+      metadata+: {
+        labels+: {"kubernetes.io/bootstrapping": "rbac-defaults"},
+        annotations+: {"rbac.authorization.kubernetes.io/autoupdate": "true"},
+      },
+      rules: [
+        {
+          apiGroups: [""],
+          resources: ["endpoints", "services", "pods", "namespaces"],
+          verbs: ["list", "watch"],
+        },
+      ],
+    },
+
+    binding: kube.ClusterRoleBinding("system:coredns") {
+      metadata+: {
+        labels+: {"kubernetes.io/bootstrapping": "rbac-defaults"},
+        annotations+: {"rbac.authorization.kubernetes.io/autoupdate": "true"},
+      },
+      roleRef_: $.coreDNS.role,
+      subjects_+: [$.coreDNS.sa],
+    },
+
+    config: kube.ConfigMap("coredns") + $.namespace {
+      data+: {
+        Corefile: |||
+          .:53 {
+            errors
+            health {
+              lameduck 40s
+            }
+            log
+            kubernetes cluster.local %s {
+              pods insecure
+              upstream
+              fallthrough in-addr.arpa ip6.arpa
+            }
+            prometheus :9153
+            proxy . /etc/resolv.conf
+            cache 30
+            reload
+          }
+        ||| % serviceClusterCidr,
+      },
+    },
+
+    // disabled..
+    svc: kube.Service("coredns") + $.namespace {
+      metadata+: {
+        labels+: {
+          "kubernetes.io/name": "CoreDNS",
+          "kubernetes.io/cluster-service": "true",
+        },
+      },
+      target_pod: $.coreDNS.deploy.spec.template,
+      spec+: {
+        clusterIP: dnsIP,
+        ports: [
+          {name: "dns", port: 53, protocol: "UDP"},
+          {name: "dnstcp", port: 53, protocol: "TCP"},
+        ],
+      },
+    },
+
+    deploy: kube.Deployment("coredns") + $.namespace {
+      spec+: {
+        template+: utils.PromScrape(9153) {
+          metadata+: {
+            annotations+: {
+              "seccomp.security.alpha.kubernetes.io/pod": "docker/default",
+            },
+          },
+          spec+: {
+            serviceAccountName: $.coreDNS.sa.metadata.name,
+            tolerations+: utils.toleratesMaster,
+            dnsPolicy: "Default",
+            // NB: lameduck is set to 40s above.
+            local p = self.containers_.coredns.livenessProbe,
+            local lameduck = 40,
+            assert p.periodSeconds * p.failureThreshold < lameduck,
+            assert lameduck < self.terminationGracePeriodSeconds,
+            terminationGracePeriodSeconds: 60,
+            volumes_+: {
+              config: kube.ConfigMapVolume($.coreDNS.config) {
+                configMap+: {
+                  items+: [{key: "Corefile", path: "Corefile"}],
+                },
+              },
+            },
+            containers_+: {
+              coredns: kube.Container("coredns") {
+                image: "k8s.gcr.io/coredns:1.3.1",
+                resources+: {
+                  limits: {memory: "170Mi"},
+                  requests: {cpu: "100m", memory: "70Mi"},
+                },
+                args_+: {
+                  conf: "/etc/coredns/Corefile",
+                },
+                volumeMounts_+: {
+                  config: {mountPath: "/etc/coredns", readOnly: true},
+                },
+                ports_+: {
+                  dns: {containerPort: 53, protocol: "UDP"},
+                  dnstcp: {containerPort: 53, protocol: "TCP"},
+                  metrics: {containerPort: 9153, protocol: "TCP"},
+                },
+                livenessProbe: {
+                  httpGet: {path: "/health", port: 8080, scheme: "HTTP"},
+                  initialDelaySeconds: 60,
+                  timeoutSeconds: 5,
+                  periodSeconds: 10,
+                  successThreshold: 1,
+                  failureThreshold: 3,
+                },
+                readinessProbe: self.livenessProbe {
+                  // TODO: enable "ready" plugin when released.
+                  //httpGet: {path: "/ready", port: 8181, scheme: "HTTP"},
+                  successThreshold: 1,
+                },
+                securityContext: {
+                  allowPrivilegeEscalation: false,
+                  capabilities: {
+                    add+: ["NET_BIND_SERVICE"],
+                    drop+: ["all"],
+                  },
+                  readOnlyRootFilesystem: true,
                 },
               },
             },
