@@ -189,13 +189,22 @@ local metallb = (import "all.jsonnet").metallb;
               }],
             },
             podAntiAffinity+: {
-              preferredDuringSchedulingIgnoredDuringExecution+: [{
-                weight: 100,
-                podAffinityTerm: {
-                  labelSelector: this.spec.selector,
-                  topologyKey: "kubernetes.io/hostname",
+              preferredDuringSchedulingIgnoredDuringExecution+: [
+                {
+                  weight: 100,
+                  podAffinityTerm: {
+                    labelSelector: this.spec.selector,
+                    topologyKey: "kubernetes.io/hostname",
+                  },
                 },
-              }],
+                {
+                  weight: 100,
+                  podAffinityTerm: {
+                    labelSelector: this.spec.selector,
+                    topologyKey: "failure-domain.beta.kubernetes.io/zone",
+                  },
+                },
+              ],
             },
           },
           containers_+: {
