@@ -11,7 +11,7 @@ local default_env = {
   no_proxy: ".lan,.local",
 };
 
-local arch = "arm";
+local arch = "amd64";
 
 local pxeNodeSelector = {
   tolerations+: utils.toleratesMaster,
@@ -82,6 +82,7 @@ local sshKeys = [
         file("/etc/kubernetes/kubelet.env", |||
                KUBELET_IMAGE_URL=docker://gcr.io/google-containers/hyperkube
                KUBELET_IMAGE_TAG=%(tag)s
+               RKT_GLOBAL_ARGS="--insecure-options=image"
              ||| % {tag: coreos_kubelet_tag},
             ),
         file("/etc/sysctl.d/max-user-watches.conf", |||
