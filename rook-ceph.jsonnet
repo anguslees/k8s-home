@@ -11,6 +11,21 @@ local cephVersion = "v13.2.5-20190410";
   namespace:: {metadata+: {namespace: "rook-ceph"}},
   ns: kube.Namespace($.namespace.metadata.namespace),
 
+  // operator picks this up and merges it into rook-ceph-config, which
+  // then (eventually) ends up as ceph.conf everywhere.
+  configOverride: kube.ConfigMap("rook-config-override") + $.namespace {
+    data+: {
+      config: |||
+        [global]
+        # Default of 0.05 is too aggressive for my cluster. (seconds)
+        mon clock drift allowed = 0.1
+        # K8s image-gc-low-threshold is 80% - not much point warning
+        # before that point. (percent)
+        mon data avail warn = 20
+      |||,
+    },
+  },
+
   mgrSa: kube.ServiceAccount("rook-ceph-mgr") + $.namespace,
 
   osdRole: kube.Role("rook-ceph-osd") + $.namespace {
@@ -118,9 +133,7 @@ local cephVersion = "v13.2.5-20190410";
       storage: {
         useAllNodes: true,
         useAllDevices: false,
-        //deviceFilter: {},
-        //location: {},
-        //config: {},
+        directories: [{path: "/var/lib/rook"}],
       },
     },
   },
@@ -193,12 +206,37 @@ local cephVersion = "v13.2.5-20190410";
 
   // NB: Still needs provisioner + storageclass support in rook
   filesystem: rookCephSystem.CephFilesystem("ceph-filesystem") + $.namespace {
+    local this = self,
     spec+: {
       metadataPool: {replicated: {size: 3}},
       dataPools: [{replicated: {size: 2}}],
       metadataServer: {
         activeCount: 1,
         activeStandby: true,
+        placement: {
+          podAntiAffinity: {
+            local selector = {
+              app: "rook-ceph-mds",
+              rook_file_system: this.metadata.name,
+            },
+            preferredDuringSchedulingIgnoredDuringExecution: [
+              {
+                weight: 100,
+                podAffinityTerm: {
+                  labelSelector: selector,
+                  topologyKey: "kubernetes.io/hostname",
+                },
+              },
+              {
+                weight: 100,
+                podAffinityTerm: {
+                  labelSelector: selector,
+                  topologyKey: "failure-domain.beta.kubernetes.io/zone",
+                },
+              },
+            ],
+          },
+        },
       },
     },
   },
