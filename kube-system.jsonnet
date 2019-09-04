@@ -17,6 +17,17 @@ local clusterCidr = "10.244.0.0/16";
 local serviceClusterCidr = "10.96.0.0/12";
 local dnsIP = "10.96.0.10";
 
+local etcdMembers = {
+  // Node e5b2509083d942b5909c7b32e0460c54
+  "bananapi6": "192.168.0.102",
+  // Node fc4698cdc1184810a2c3447a7ee66689
+  "etcd-0": "192.168.0.129",
+  // Node 0b5642a6cc18493d81a606483d9cbb7b
+  "bananapi7": "192.168.0.132",
+};
+
+local isolateMasters = false;
+
 local labelSelector(labels) = {
   matchExpressions: [
     {key: kv[0], operator: "In", values: [kv[1]]}
@@ -31,6 +42,201 @@ local labelSelector(labels) = {
 {
   namespace:: {
     metadata+: { namespace: "kube-system" },
+  },
+
+  etcd: {
+    svc: kube.Service("etcd") + $.namespace {
+      target_pod: $.etcd.deploy.spec.template,
+      spec+: {
+        clusterIP: "None", // headless
+        ports: [{
+          // NB: etcd DNS (SRV) discovery uses _etcd-server-ssl._tcp
+          name: "etcd-server-ssl",
+          port: 2379,
+          targetPort: self.port,
+          protocol: "TCP",
+        }],
+      },
+    },
+
+    pdb: kube.PodDisruptionBudget("etcd") + $.namespace {
+      target_pod: $.etcd.deploy.spec.template,
+      spec+: {minAvailable: 2},
+    },
+
+    deploy: kube.StatefulSet("etcd") + $.namespace {
+      local this = self,
+      spec+: {
+        replicas: 1,  // 3
+        podManagementPolicy: "OrderedReady",
+        updateStrategy+: {
+          type: "RollingUpdate",
+        },
+        volumeClaimTemplates_: {
+          //localpath?
+        },
+        template+: utils.CriticalPodSpec + {
+          metadata+: {
+            annotations+: {
+              "checkpointer.alpha.coreos.com/checkpoint": "true",
+            },
+          },
+          spec+: {
+            hostNetwork: true,
+            dnsPolicy: "ClusterFirstWithHostNet",
+            tolerations+: utils.toleratesMaster,
+            automountServiceAccountToken: false,
+            securityContext+: {
+              // uid=0 needed to write to /var/lib/etcd-data.  NB:
+              // kubelet always creates DirectoryOrCreate hostpaths
+              // with uid:gid 0:0, perms 0755.
+              // TODO: revisit with local path provisioner in k8s >= 1.14.
+              //runAsNonRoot: true,
+              //runAsUser: 2000,
+              //fsGroup: 0,
+            },
+            volumes_: {
+              data: kube.HostPathVolume("/var/lib/etcd-data", "DirectoryOrCreate"),
+              etcd_ca: kube.SecretVolume($.secrets.etcd_ca),
+              etcd_server: kube.SecretVolume($.secrets.etcdServerKey),
+              etcd_peer: kube.SecretVolume($.secrets.etcdPeerKey),
+              etcd_client: kube.SecretVolume($.secrets.etcdMonitorKey),
+            },
+            // Moved to a nodeAffinity rule, to workaround a limitation
+            // with pod-checkpointer (or arguably kubelet).
+            //nodeSelector+: utils.archSelector("amd64"),
+            affinity+: {
+              nodeAffinity: {
+                requiredDuringSchedulingIgnoredDuringExecution+: {
+                  nodeSelectorTerms: [
+                    labelSelector({
+                      "beta.kubernetes.io/arch": "amd64",
+                      // FIXME: temporary hack to pin etcd instance to node.
+                      // Replace with local volumes.
+                      "kubernetes.io/hostname": "fc4698cdc1184810a2c3447a7ee66689",
+                    }),
+                  ],
+                },
+              },
+              podAntiAffinity: {
+                requiredDuringSchedulingIgnoredDuringExecution: [{
+                  labelSelector: labelSelector(this.spec.template.metadata.labels),
+                  topologyKey: "kubernetes.io/hostname",
+                }],
+              },
+            },
+            containers_+: {
+              etcd: kube.Container("etcd") {
+                image: "gcr.io/etcd-development/etcd:v3.3.15",
+                securityContext+: {
+                  allowPrivilegeEscalation: false,
+                },
+                command: ["etcd"],
+                args_+: {
+                  "advertise-client-urls": "https://$(POD_IP):2379",
+                  "data-dir": "/data",
+                  "listen-client-urls": "https://127.0.0.1:2379,https://$(POD_IP):2379",
+                  // Imposes even more restrictions on SANs :(
+                  //"discovery-srv": $.etcd.svc.host,
+                  "initial-cluster": std.join(",", [
+                    "%s=https://%s:2380" % kv for kv in kube.objectItems(etcdMembers)
+                  ]),
+                  "initial-advertise-peer-urls": "https://$(POD_IP):2380",
+                  "initial-cluster-state": "existing",
+                  "cert-file": "/keys/etcd-server/tls.crt",
+                  "key-file": "/keys/etcd-server/tls.key",
+                  "peer-cert-file": "/keys/etcd-peer/tls.crt",
+                  "peer-key-file": "/keys/etcd-peer/tls.key",
+                  "peer-client-cert-auth": true,
+                  "peer-cert-allowed-cn": "etcd.local",
+                  "peer-trusted-ca-file": "/keys/etcd-ca/ca.crt",
+                  "listen-peer-urls": "https://$(POD_IP):2380",
+                  "client-cert-auth": true,
+                  "trusted-ca-file": "/keys/etcd-ca/ca.crt",
+                  "election-timeout": "10000",
+                  "heartbeat-interval": "1000",
+                  "listen-metrics-urls": "http://0.0.0.0:2381",
+                },
+                env_+: {
+                  ETCD_NAME: kube.FieldRef("metadata.name"),
+                  POD_IP: kube.FieldRef("status.podIP"),
+                  ETCDCTL_API: "3",
+                  ETCDCTL_CACERT: "/keys/etcd-ca/ca.crt",
+                  ETCDCTL_CERT: "/keys/etcd-client/tls.crt",
+                  ETCDCTL_KEY: "/keys/etcd-client/tls.key",
+                },
+                livenessProbe: {
+                  local probe = self,
+                  // Looks like /health fails if endpoint is out of quorum :(
+                  //httpGet: {path: "/health", port: 2381, scheme: "HTTP"},
+                  exec: {
+                    etcdctl_args:: ["endpoint", "status"],
+                    command: [
+                      "etcdctl",
+                      "--dial-timeout=5s",
+                      "--command-timeout=%ds" % probe.timeoutSeconds,
+                      "--endpoints=https://127.0.0.1:2379",
+                      // "certificate is valid for 192.168.0.129, not 127.0.0.1"
+                      // We don't care, since we trust 127.0.0.1.
+                      "--insecure-skip-tls-verify",
+                    ] + self.etcdctl_args,
+                  },
+                  failureThreshold: 8,
+                  initialDelaySeconds: 180,
+                  timeoutSeconds: 15,
+                  periodSeconds: 30,
+                },
+                readinessProbe: self.livenessProbe {
+                  exec+: {
+                    etcdctl_args: ["endpoint", "health"],
+                  },
+                  failureThreshold: 3,
+                },
+                volumeMounts_+: {
+                  data: {mountPath: "/data"},
+                  etcd_ca: {mountPath: "/keys/etcd-ca", readOnly: true},
+                  etcd_peer: {mountPath: "/keys/etcd-peer", readOnly: true},
+                  etcd_server: {mountPath: "/keys/etcd-server", readOnly: true},
+                  etcd_client: {mountPath: "/keys/etcd-client", readOnly: true},
+                },
+                resources+: {
+                  limits: {memory: "550Mi", cpu: "700m"},
+                  requests: self.limits,
+                },
+                // lifecycle+: {
+                //   local etcdctl = [
+                //     "etcdctl",
+                //     "--endpoints=https://etcd:2379",
+                //     "--cacert=/keys/etcd-ca.pem",
+                //     "--cert=/keys/etcd-$(ETCD_NAME)-server.pem",
+                //     "--key=/keys/etcd-$(ETCD_NAME)-server-key.pem",
+                //   ],
+                //   postStart: {
+                //     exec: {
+                //       command: etcdctl + [
+                //         "member",
+                //         "add",
+                //         "$(ETCD_NAME)",
+                //         "--peer-urls=https://$(POD_IP):2380",
+                //       ],
+                //     },
+                //   },
+                //   preStop: {
+                //     exec: {
+                //       command: etcdctl + [
+                //         "member",
+                //         "remove",
+                //         "$(ETCD_NAME)",
+                //       ],
+                //     },
+                //   },
+                // },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 
   // Quoting the same comment from bootkube:
@@ -68,6 +274,111 @@ local labelSelector(labels) = {
           },
         }],
         "current-context": "default",
+      },
+    },
+  },
+
+  secrets: {
+    local tlsType = "kubernetes.io/tls",
+
+    // Public CA bundle (ca.crt - possibly contains multiple certificates)
+    // Same as /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    // kubeadm (incorrectly) uses /etc/kubernetes/pki/ca.crt
+    ca_bundle: kube.Secret("kube-ca-bundle") + $.namespace {
+      data_: {
+        "ca.crt": importstr "pki/ca.crt",
+      },
+    },
+
+    // Private CA key and matching (single) certificate
+    // kubeadm uses /etc/kubernetes/pki/ca.{crt,key}
+    ca: kube.Secret("kube-ca") + $.namespace {
+      type: tlsType,
+      data_: {
+        "tls.crt": importstr "pki/ca-primary.crt",
+        "tls.key": importstr "pki/ca.key",
+      },
+    },
+
+    // kubeadm uses /etc/kubernetes/pki/etcd-ca.crt
+    etcd_ca: kube.Secret("kube-etcd-ca") + $.namespace {
+      data_: {
+        "ca.crt": importstr "pki/etcd-ca.pem",
+      },
+    },
+
+    etcdServerKey: kube.Secret("etcd-server") + $.namespace {
+      data_: {
+        "tls.crt": importstr "pki/etcd-etcd.local-server.pem",
+        "tls.key": importstr "pki/etcd-etcd.local-server-key.pem",
+      },
+    },
+
+    etcdPeerKey: kube.Secret("etcd-peer") + $.namespace {
+      data_: {
+        "tls.crt": importstr "pki/etcd-etcd.local-peer.pem",
+        "tls.key": importstr "pki/etcd-etcd.local-peer-key.pem",
+      },
+    },
+
+    etcdMonitorKey: kube.Secret("etcd-monitor") + $.namespace {
+      data_: {
+        "tls.crt": importstr "pki/etcd-monitor-client.pem",
+        "tls.key": importstr "pki/etcd-monitor-client-key.pem",
+      },
+    },
+
+    // kubeadm uses /etc/kubernetes/pki/etcd-apiserver-client.{crt,key}
+    etcd_apiserver_client: kube.Secret("kube-etcd-apiserver-client") + $.namespace {
+      type: tlsType,
+      data_: {
+        "tls.crt": importstr "pki/etcd-apiserver-client.pem",
+        "tls.key": importstr "pki/etcd-apiserver-client-key.pem",
+      },
+    },
+
+    // kubeadm uses /etc/kubernetes/pki/apiserver.{crt,key}
+    apiserver: kube.Secret("kube-apiserver") + $.namespace {
+      type: tlsType,
+      data_: {
+        "tls.crt": importstr "pki/apiserver.crt",
+        "tls.key": importstr "pki/apiserver.key",
+      },
+    },
+
+    // kubeadm uses /etc/kubernetes/pki/apiserver-kubelet-client.{crt,key}
+    apiserver_kubelet_client: kube.Secret("kube-apiserver-kubelet-client") + $.namespace {
+      type: tlsType,
+      data_: {
+        "tls.crt": importstr "pki/apiserver-kubelet-client.crt",
+        "tls.key": importstr "pki/apiserver-kubelet-client.key",
+      },
+    },
+
+    // kubeadm uses /etc/kubernetes/pki/sa.{pub,key}
+    service_account: kube.Secret("kube-service-account") + $.namespace {
+      data_: {
+        "key.pub": importstr "pki/sa.pub",
+        "key.key": importstr "pki/sa.key",
+      },
+    },
+
+    // CA bundle (ca.crt)
+    // kubeadm uses /etc/kubernetes/pki/front-proxy-ca.{crt,key}
+    // TODO: I suspect this should be a CA bundle, not a crt/key pair??
+    front_proxy_ca: kube.Secret("kube-front-proxy-ca") + $.namespace {
+      data_: {
+        "tls.crt": importstr "pki/front-proxy-ca.crt",
+        "tls.key": importstr "pki/front-proxy-ca.key",
+      },
+    },
+
+    // kubeadm uses /etc/kubernetes/pki/front-proxy-client.{crt,key}
+    front_proxy_client: kube.Secret("kube-front-proxy-client") + $.namespace {
+      type: tlsType,
+      data_: {
+        "tls.crt": importstr "pki/front-proxy-client.crt",
+        "tls.key": importstr "pki/front-proxy-client.key",
       },
     },
   },
@@ -152,40 +463,47 @@ local labelSelector(labels) = {
       spec+: {minAvailable: 1},
     },
 
-    deploy: kube.DaemonSet("kube-apiserver") + $.namespace {
+    pdbInternal: kube.PodDisruptionBudget("apiserver-internal") + $.namespace {
+      target_pod: $.apiserver.internalDeploy.spec.template,
+      spec+: {minAvailable: 1},
+    },
+
+    // FIXME: "the HPA was unable to compute the replica count: unable
+    // to get metrics for resource cpu: unable to fetch metrics from
+    // resource metrics API: the server could not find the requested
+    // resource (get pods.metrics.k8s.io)"
+    hpa: kube.HorizontalPodAutoscaler("kube-apiserver") + $.namespace {
+      target: $.apiserver.internalDeploy,
+      spec+: {
+        maxReplicas: 5,
+      },
+    },
+
+    commonDeploy:: {
       local this = self,
       spec+: {
         template+: utils.CriticalPodSpec {
-          metadata+: {
-            annotations+: {
-              "checkpointer.alpha.coreos.com/checkpoint": "true",
-            },
-          },
           spec+: {
-            hostNetwork: true,
-            dnsPolicy: "ClusterFirstWithHostNet",
-            // Moved to a nodeAffinity rule, to workaround a limitation
-            // with pod-checkpointer (or arguably kubelet).
-            //nodeSelector+: {"node-role.kubernetes.io/master": ""},
-            affinity+: {
-              nodeAffinity+: {
-                requiredDuringSchedulingIgnoredDuringExecution+: {
-                  nodeSelectorTerms: [
-                    labelSelector({
-                      "node-role.kubernetes.io/master": "",
-                    })
-                  ],
-                },
-              },
-            },
             securityContext+: {
               runAsNonRoot: true,
               runAsUser: 65534,
             },
             automountServiceAccountToken: false,
-            tolerations+: utils.toleratesMaster,
             volumes_+: {
-              certs: kube.HostPathVolume("/etc/kubernetes/pki", "DirectoryOrCreate"),
+              kubelet_client: kube.SecretVolume($.secrets.apiserver_kubelet_client),
+              sa: kube.SecretVolume($.secrets.service_account) {
+                secret+: {
+                  // restrict to public key only
+                  items: [{key: "key.pub", path: self.key}],
+                },
+              },
+              ca_bundle: kube.SecretVolume($.secrets.ca_bundle),
+              fpc: kube.SecretVolume($.secrets.front_proxy_client),
+              fp_ca: kube.SecretVolume($.secrets.front_proxy_ca),
+              tls: kube.SecretVolume($.secrets.apiserver),
+              etcd_ca: kube.SecretVolume($.secrets.etcd_ca),
+              etcd_client: kube.SecretVolume($.secrets.etcd_apiserver_client),
+
               cacerts: kube.HostPathVolume("/etc/ssl/certs", "DirectoryOrCreate"),
             },
             containers_+: {
@@ -204,36 +522,44 @@ local labelSelector(labels) = {
                   "insecure-port": "0",
                   "secure-port": "6443",
                   "authorization-mode": "Node,RBAC",
-                  "etcd-servers": "http://127.0.0.1:2379",
+
+                  "etcd-servers": std.join(",", [
+                    "https://%s:2379" % v for v in kube.objectValues(etcdMembers)
+                  ]),
+
                   "advertise-address": "$(POD_IP)",
                   "external-hostname": externalHostname,
 
+                  "etcd-count-metric-poll-period": "10m", // default 1m
                   "watch-cache": "false",  // disable to conserve precious ram
                   //"default-watch-cache-size": "0", // default 100
                   "request-timeout": "5m",
                   "max-requests-inflight": "150", // ~15 per 25-30 pods, default 400
                   "target-ram-mb": "300", // ~60MB per 20-30 pods
 
-                  "kubelet-client-certificate": "/etc/kubernetes/pki/apiserver-kubelet-client.crt",
-                  "kubelet-client-key": "/etc/kubernetes/pki/apiserver-kubelet-client.key",
-                  "service-account-key-file": "/etc/kubernetes/pki/sa.pub",
-                  "client-ca-file": "/etc/kubernetes/pki/ca.crt",
-                  "proxy-client-cert-file": "/etc/kubernetes/pki/front-proxy-client.crt",
-                  "proxy-client-key-file": "/etc/kubernetes/pki/front-proxy-client.key",
-                  "tls-cert-file": "/etc/kubernetes/pki/apiserver.crt",
-                  "tls-private-key-file": "/etc/kubernetes/pki/apiserver.key",
-                  "etcd-cafile": "/etc/kubernetes/pki/etcd-ca.pem",
-                  "etcd-certfile": "/etc/kubernetes/pki/etcd-apiserver-client.pem",
-                  "etcd-keyfile": "/etc/kubernetes/pki/etcd-apiserver-client-key.pem",
+                  "kubelet-client-certificate": "/keys/apiserver-kubelet-client/tls.crt",
+                  "kubelet-client-key": "/keys/apiserver-kubelet-client/tls.key",
+                  "service-account-key-file": "/keys/sa/key.pub",
+                  "client-ca-file": "/keys/ca-bundle/ca.crt",
+                  "proxy-client-cert-file": "/keys/front-proxy-client/tls.crt",
+                  "proxy-client-key-file": "/keys/front-proxy-client/tls.key",
+                  "tls-cert-file": "/keys/apiserver/tls.crt",
+                  "tls-private-key-file": "/keys/apiserver/tls.key",
+                  "etcd-cafile": "/keys/etcd-ca/ca.crt",
+                  "etcd-certfile": "/keys/etcd-apiserver-client/tls.crt",
+                  "etcd-keyfile": "/keys/etcd-apiserver-client/tls.key",
 
                   "requestheader-extra-headers-prefix": "X-Remote-Extra-",
                   "requestheader-allowed-names": "front-proxy-client",
                   "requestheader-username-headers": "X-Remote-User",
                   "requestheader-group-headers": "X-Remote-Group",
-                  "requestheader-client-ca-file": "/etc/kubernetes/pki/front-proxy-ca.crt",
+                  "requestheader-client-ca-file": "/keys/front-proxy-ca/tls.crt",
                 },
                 env_+: {
                   POD_IP: kube.FieldRef("status.podIP"),
+                },
+                ports_+: {
+                  https: {containerPort: 6443, protocol: "TCP"},
                 },
                 livenessProbe:: {  // FIXME: disabled for now
                   httpGet: {path: "/healthz", port: 6443, scheme: "HTTPS"},
@@ -252,11 +578,59 @@ local labelSelector(labels) = {
                   requests: {cpu: "250m"},
                 },
                 volumeMounts_+: {
-                  certs: {mountPath: "/etc/kubernetes/pki", readOnly: true},
+                  kubelet_client: {mountPath: "/keys/apiserver-kubelet-client", readOnly: true},
+                  sa: {mountPath: "/keys/sa", readOnly: true},
+                  ca_bundle: {mountPath: "/keys/ca-bundle", readOnly: true},
+                  fpc: {mountPath: "/keys/front-proxy-client", readOnly: true},
+                  fp_ca: {mountPath: "/keys/front-proxy-ca", readOnly: true},
+                  tls: {mountPath: "/keys/apiserver", readOnly: true},
+                  etcd_ca: {mountPath: "/keys/etcd-ca", readOnly: true},
+                  etcd_client: {mountPath: "/keys/etcd-apiserver-client", readOnly: true},
                   cacerts: {mountPath: "/etc/ssl/certs", readOnly: true},
                 },
               },
             },
+          },
+        },
+      },
+    },
+
+    internalDeploy: kube.Deployment("kube-apiserver-internal") + $.namespace + $.apiserver.commonDeploy {
+      spec+: {
+        replicas: 1,
+      },
+    },
+
+    deploy: kube.DaemonSet("kube-apiserver") + $.namespace + $.apiserver.commonDeploy {
+      spec+: {
+        template+: {
+          metadata+: {
+            annotations+: {
+              "checkpointer.alpha.coreos.com/checkpoint": "true",
+            },
+          },
+          spec+: {
+            hostNetwork: true,
+            dnsPolicy: "ClusterFirstWithHostNet",
+            // Moved to a nodeAffinity rule, to workaround a limitation
+            // with pod-checkpointer (or arguably kubelet).
+            //nodeSelector+: {"node-role.kubernetes.io/master": ""},
+            affinity+: {
+              nodeAffinity+: {
+                requiredDuringSchedulingIgnoredDuringExecution+: {
+                  nodeSelectorTerms: if isolateMasters then [
+                    labelSelector({
+                      "node-role.kubernetes.io/master": "",
+                    }),
+                  ] else [
+                    labelSelector({
+                      "apiserver": "true",
+                    }),
+                  ],
+                },
+              },
+            },
+            tolerations+: utils.toleratesMaster,
           },
         },
       },
@@ -290,17 +664,14 @@ local labelSelector(labels) = {
           spec+: {
             affinity+: {
               podAntiAffinity: {
-                preferredDuringSchedulingIgnoredDuringExecution: [{
-                  weight: 100,
-                  podAffinityTerm: {
-                    labelSelector: labelSelector(this.spec.template.metadata.labels),
-                    topologyKey: "kubernetes.io/hostname",
-                  },
+                requiredDuringSchedulingIgnoredDuringExecution: [{
+                  labelSelector: labelSelector(this.spec.template.metadata.labels),
+                  topologyKey: "kubernetes.io/hostname",
                 }],
               },
             },
             serviceAccountName: $.controller_manager.sa.metadata.name,
-            nodeSelector+: {"node-role.kubernetes.io/master": ""},
+            [if isolateMasters then "nodeSelector"]+: {"node-role.kubernetes.io/master": ""},
             tolerations+: utils.toleratesMaster,
             securityContext+: {
               runAsNonRoot: true,
@@ -308,9 +679,11 @@ local labelSelector(labels) = {
             },
             volumes_+: {
               varrunkubernetes: kube.EmptyDirVolume(),
-              certs: kube.HostPathVolume("/etc/kubernetes/pki", "DirectoryOrCreate"),
               cacerts: kube.HostPathVolume("/etc/ssl/certs", "DirectoryOrCreate"),
               flexvolume: kube.HostPathVolume("/var/lib/kubelet/volumeplugins", "DirectoryOrCreate"),
+              ca: kube.SecretVolume($.secrets.ca),
+              ca_bundle: kube.SecretVolume($.secrets.ca_bundle),
+              sa: kube.SecretVolume($.secrets.service_account),
             },
             containers_+: {
               cm: kube.Container("controller-manager") {
@@ -332,11 +705,11 @@ local labelSelector(labels) = {
                   "leader-elect-renew-deadline": "270s", // default 10s
                   "leader-elect-retry-period": "20s", // default 2s
 
-                  "root-ca-file": "/etc/kubernetes/pki/ca.crt",
-                  "service-account-private-key-file": "/etc/kubernetes/pki/sa.key",
-                  // cluster-signing-cert-file must be a single key, unlike ca.crt
-                  "cluster-signing-cert-file": "/etc/kubernetes/pki/ca-primary.crt",
-                  "cluster-signing-key-file": "/etc/kubernetes/pki/ca.key",
+                  "root-ca-file": "/keys/ca_bundle/ca.crt",
+                  "service-account-private-key-file": "/keys/sa/key.key",
+                  // cluster-signing-cert-file must be a single key, unlike --root-ca-file
+                  "cluster-signing-cert-file": "/keys/ca/tls.crt",
+                  "cluster-signing-key-file": "/keys/ca/tls.key",
                 },
                 livenessProbe:: { // FIXME: disabled for now
                   httpGet: {path: "/healthz", port: 10252, scheme: "HTTP"},
@@ -347,9 +720,11 @@ local labelSelector(labels) = {
                   successThreshold: 3,
                 },
                 volumeMounts_+: {
-                  certs: {mountPath: "/etc/kubernetes/pki", readOnly: true},
+                  ca: {mountPath: "/keys/ca", readOnly: true},
+                  ca_bundle: {mountPath: "/keys/ca_bundle", readOnly: true},
+                  sa: {mountPath: "/keys/sa", readOnly: true},
                   cacerts: {mountPath: "/etc/ssl/certs", readOnly: true},
-                  flexvolume: {mountPath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec"},
+                  flexvolume: {mountPath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec", readOnly: true},
                   varrunkubernetes: {mountPath: "/var/run/kubernetes"},
                 },
                 resources+: {
@@ -394,21 +769,18 @@ local labelSelector(labels) = {
       local this = self,
       spec+: {
         replicas: 2,
-        template+: utils.CriticalPodSpec + {
+        template+: utils.CriticalPodSpec {
           spec+: {
             affinity+: {
               podAntiAffinity: {
-                preferredDuringSchedulingIgnoredDuringExecution: [{
-                  weight: 100,
-                  podAffinityTerm: {
-                    labelSelector: labelSelector(this.spec.template.metadata.labels),
-                    topologyKey: "kubernetes.io/hostname",
-                  },
+                requiredDuringSchedulingIgnoredDuringExecution: [{
+                  labelSelector: labelSelector(this.spec.template.metadata.labels),
+                  topologyKey: "kubernetes.io/hostname",
                 }],
               },
             },
-            nodeSelector+: {"node-role.kubernetes.io/master": ""},
             tolerations+: utils.toleratesMaster,
+            [if isolateMasters then "nodeSelector"]+: {"node-role.kubernetes.io/master": ""},
             serviceAccountName: $.scheduler.sa.metadata.name,
             containers_+: {
               scheduler: kube.Container("scheduler") {
@@ -480,17 +852,14 @@ local labelSelector(labels) = {
           spec+: {
             serviceAccountName: $.checkpointer.sa.metadata.name,
             hostNetwork: true,
+            tolerations+: utils.toleratesMaster,
             // Moved to a nodeAffinity rule, to workaround a limitation
             // with pod-checkpointer (or arguably kubelet).
             //nodeSelector+: {"node-role.kubernetes.io/master": ""},
-            tolerations+: utils.toleratesMaster,
-            volumes_+: {
-              kubeconfig: kube.ConfigMapVolume($.kubeconfig_in_cluster),
-              etc_k8s: kube.HostPathVolume("/etc/kubernetes"),
-              var_run: kube.HostPathVolume("/var/run"),
-            },
             affinity+: {
-              nodeAffinity+: {
+              // Harmless to run everywhere, but only necessary
+              // wherever checkpointed (apiserver) jobs are running
+              [if isolateMasters then "nodeAffinity"]+: {
                 requiredDuringSchedulingIgnoredDuringExecution+: {
                   nodeSelectorTerms: [
                     labelSelector({
@@ -499,6 +868,11 @@ local labelSelector(labels) = {
                   ],
                 },
               },
+            },
+            volumes_+: {
+              kubeconfig: kube.ConfigMapVolume($.kubeconfig_in_cluster),
+              etc_k8s: kube.HostPathVolume("/etc/kubernetes"),
+              var_run: kube.HostPathVolume("/var/run"),
             },
             containers_+: {
               checkpointer: kube.Container("checkpointer") {
