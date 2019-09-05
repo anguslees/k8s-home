@@ -79,7 +79,11 @@ local utils = import "utils.libsonnet";
               livenessProbe: self.readinessProbe,
               resources+: {
                 limits: {cpu: "1", memory: "1Gi"},
-                requests: {cpu: "10m", memory: "280Mi"},
+                requests: {
+                  cpu: "10m",
+                  memory: "280Mi",
+                  "ephemeral-storage": "10Gi",
+                },
               },
             },
             metrics: kube.Container("squid-exporter") {
