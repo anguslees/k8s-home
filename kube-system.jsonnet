@@ -402,6 +402,7 @@ local labelSelector(labels) = {
             dnsPolicy: "ClusterFirst",
             hostNetwork: true,
             serviceAccountName: $.kube_proxy.sa.metadata.name,
+            priorityClassName: "system-node-critical",
             tolerations: utils.toleratesMaster + [{
               effect: "NoSchedule",
               key: "node.cloudprovider.kubernetes.io/uninitialized",
