@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local utils = import "utils.libsonnet";
 
 // https://hub.docker.com/r/rook/ceph/tags
-local version = "v1.0.2";
+local version = "v1.0.6";
 
 {
   namespace:: {metadata+: {namespace: "rook-ceph-system"}},
