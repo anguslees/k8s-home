@@ -1049,4 +1049,145 @@ local labelSelector(labels) = {
       },
     },
   },
+
+  // https://github.com/kubernetes-incubator/metrics-server
+  metrics: {
+    local arch = "amd64",
+
+    serviceAccount: kube.ServiceAccount("metrics-server") + $.namespace,
+
+    clusterRoleBinding: kube.ClusterRoleBinding("metrics-server:system:auth-delegator") {
+      roleRef: {
+        apiGroup: "rbac.authorization.k8s.io",
+        kind: "ClusterRole",
+        name: "system:auth-delegator",
+      },
+      subjects_+: [$.metrics.serviceAccount],
+    },
+
+    metricsReaderRole: kube.ClusterRole("system:aggregated-metrics-reader") {
+      metadata+: {
+        labels+: {
+          "rbac.authorization.k8s.io/aggregate-to-view": "true",
+          "rbac.authorization.k8s.io/aggregate-to-edit": "true",
+          "rbac.authorization.k8s.io/aggregate-to-admin": "true",
+        },
+      },
+      rules: [
+        {
+          apiGroups: ["metrics.k8s.io"],
+          resources: ["pods", "nodes"],
+          verbs: ["get", "list", "watch"],
+        },
+      ],
+    },
+
+    roleBinding: kube.RoleBinding("metrics-server-auth-reader") + $.namespace {
+      roleRef: {
+        apiGroup: "rbac.authorization.k8s.io",
+        kind: "Role",
+        name: "extension-apiserver-authentication-reader",
+      },
+      subjects_+: [$.metrics.serviceAccount],
+    },
+
+    metricsRole: kube.ClusterRole("system:metrics-server") {
+      rules: [
+        {
+          apiGroups: [""],
+          resources: ["pods", "nodes", "nodes/stats", "namespaces"],
+          verbs: ["get", "list", "watch"],
+        },
+      ],
+    },
+
+    metricsRoleBinding: kube.ClusterRoleBinding("system:metrics-server") {
+      roleRef_: $.metrics.metricsRole,
+      subjects_+: [$.metrics.serviceAccount],
+    },
+
+    svc: kube.Service("metrics-server") + $.namespace {
+      metadata+: {
+        labels+: {"kubernetes.io/name": "Metrics-server"},
+      },
+      target_pod: $.metrics.deploy.spec.template,
+      port: 443,
+    },
+
+    deploy: kube.Deployment("metrics-server") + $.namespace {
+      spec+: {
+        template+: {
+          spec+: {
+            nodeSelector+: utils.archSelector(arch),
+            serviceAccountName: $.metrics.serviceAccount.metadata.name,
+            volumes_+: {
+              tmp: kube.EmptyDirVolume(),
+              fp_ca: kube.SecretVolume($.secrets.front_proxy_ca) {
+                secret+: {
+                  items: [
+                    {key: "tls.crt", path: self.key}, // public cert only
+                  ],
+                },
+              },
+            },
+            containers_+: {
+              default: kube.Container("metrics-server") {
+                image: "gcr.io/google_containers/metrics-server-%s:v0.3.4" % [arch],
+                command: ["/metrics-server"],
+                args_+: {
+                  "logtostderr": "true",
+                  "v": "1",
+                  "secure-port": "8443",
+                  "cert-dir": "/tmp/certificates",
+                  "kubelet-preferred-address-types": "InternalIP",
+                  "kubelet-insecure-tls": "true",
+                  "requestheader-client-ca-file": "/keys/front-proxy-ca/tls.crt",
+                  "requestheader-allowed-names": "front-proxy-client",
+                },
+                ports_+: {
+                  https: {containerPort: 8443, protocol: "TCP"},
+                },
+                securityContext+: {
+                  runAsNonRoot: true,
+                  runAsUser: 65534,
+                  readOnlyRootFilesystem: true,
+                  allowPrivilegeEscalation: false,
+                },
+                livenessProbe: {
+                  httpGet: {path: "/healthz", port: 8443, scheme: "HTTPS"},
+                  initialDelaySeconds: 60,
+                  failureThreshold: 10,
+                  periodSeconds: 30,
+                  successThreshold: 1,
+                  timeoutSeconds: 20,
+                },
+                readinessProbe: self.livenessProbe {
+                  failureThreshold: 2,
+                  successThreshold: 3,
+                },
+                volumeMounts_+: {
+                  tmp: {mountPath: "/tmp"},
+                  fp_ca: {mountPath: "/keys/front-proxy-ca", readOnly: true},
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+
+    apiSvc: kube._Object("apiregistration.k8s.io/v1beta1", "APIService", "v1beta1.metrics.k8s.io") {
+      spec+: {
+        service: {
+          name: $.metrics.svc.metadata.name,
+          namespace: $.metrics.svc.metadata.namespace,
+        },
+        group: "metrics.k8s.io",
+        version: "v1beta1",
+        insecureSkipTLSVerify: true,
+        groupPriorityMinimum: 100,
+        versionPriority: 100,
+      },
+    },
+  },
 }
