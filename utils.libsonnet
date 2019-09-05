@@ -1,6 +1,8 @@
 local kube = import "kube.libsonnet";
 
 {
+  // NB: deprecated in 1.14 and removed in 1.18
+  // TODO: Replace with kubernetes.io/arch
   archSelector(arch):: {"beta.kubernetes.io/arch": arch},
 
   toleratesMaster:: [{
@@ -18,6 +20,7 @@ local kube = import "kube.libsonnet";
       },
     },
     spec+: {
+      priorityClassName: "system-cluster-critical",
       tolerations+: [{
         key: "CriticalAddonsOnly",
         operator: "Exists",

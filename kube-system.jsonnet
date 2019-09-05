@@ -9,7 +9,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local version = "v1.13.10";
+local version = "v1.14.6";
 
 local externalHostname = "kube.lan";
 local apiServer = "https://%s:6443" % [externalHostname];
@@ -109,8 +109,7 @@ local labelSelector(labels) = {
               nodeAffinity: {
                 requiredDuringSchedulingIgnoredDuringExecution+: {
                   nodeSelectorTerms: [
-                    labelSelector({
-                      "beta.kubernetes.io/arch": "amd64",
+                    labelSelector(utils.archSelector("amd64") + {
                       // FIXME: temporary hack to pin etcd instance to node.
                       // Replace with local volumes.
                       "kubernetes.io/hostname": "fc4698cdc1184810a2c3447a7ee66689",

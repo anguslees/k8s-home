@@ -11,7 +11,7 @@ local version = "v0.7.0";
 
 local arch = "amd64";
 
-local archNodeSelector(a) = {nodeSelector+: {"beta.kubernetes.io/arch": a}};
+local archNodeSelector(a) = {nodeSelector+: utils.archSelector(a)};
 
 {
   namespace:: {

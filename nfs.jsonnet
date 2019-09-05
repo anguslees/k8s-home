@@ -1,4 +1,5 @@
 local kube = import "kube.libsonnet";
+local utils = import "utils.libsonnet";
 
 local nfs_server = "192.168.0.10"; // hostname fails to resolve (?)
 local nfs_path = "/home/kube";
@@ -61,9 +62,7 @@ local provisioner_image = "quay.io/external_storage/nfs-client-provisioner%s:v2.
         spec+: {
           local spec = self,
           serviceAccountName: $.serviceAccount.metadata.name,
-	  nodeSelector: {
-	    "beta.kubernetes.io/arch": arch,
-	  },
+	  nodeSelector+: utils.archSelector(arch),
           containers_+: {
             default: kube.Container("nfs-client-provisioner") {
               image: provisioner_image,
