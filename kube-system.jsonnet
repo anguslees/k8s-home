@@ -697,6 +697,7 @@ local labelSelector(labels) = {
                   "cluster-cidr": clusterCidr,
                   "service-cluster-ip-range": serviceClusterCidr,
                   "node-cidr-mask-size": "24",
+                  "terminated-pod-gc-threshold": "100", // default is massive 12500
                   //"cloud-provider"
 
                   // Reduce leader-elect load
