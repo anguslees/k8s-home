@@ -941,7 +941,7 @@ local labelSelector(labels) = {
               lameduck 40s
             }
             log
-            kubernetes cluster.local %s {
+            kubernetes cluster.local in-addr.arpa ip6.arpa {
               pods insecure
               upstream
               fallthrough in-addr.arpa ip6.arpa
@@ -953,7 +953,7 @@ local labelSelector(labels) = {
             loadbalance
             # Note no 'reload' since we use HashedConfigMap
           }
-        ||| % serviceClusterCidr,
+        |||,
       },
     },
 
