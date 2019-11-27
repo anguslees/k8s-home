@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local coreos_kubelet_tag = "v1.14.6";
+local coreos_kubelet_tag = "v1.15.6";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)
@@ -21,6 +21,11 @@ local pxeNodeSelector = {
 local sshKeys = [
   importstr "/home/gus/.ssh/id_rsa.pub",
 ];
+
+local filekey(path) = (
+  local tmp = kubecfg.regexSubst("[^a-zA-Z0-9]+", path, "-");
+  kubecfg.regexSubst("^-+", tmp, "")
+);
 
 {
   namespace:: {
@@ -71,10 +76,12 @@ local sshKeys = [
         dir("/etc/ssl/etcd/"),
       ],
       local file(path, contents) = {
+        local this = self,
         filesystem: "root",
         path: path,
+        contents_:: contents,
         contents: {
-          source: "data:;base64," + std.base64(contents),
+          source: "data:;base64," + std.base64(this.contents_),
         },
         mode: kube.parseOctal("0644"),
       },
@@ -163,7 +170,7 @@ local sshKeys = [
                     "-", std.join("", [if utils.isalpha(c) then c else "-"
                       for c in std.stringChars(path)]));
                   "--volume=%(n)s,kind=host,source=%(p)s --mount volume=%(n)s,target=%(p)s" % {n: name(p), p: p}
-                  for p in ["/etc/resolv.conf", "/var/lib/cni", "/etc/cni/net.d", "/opt/cni/bin", "/var/log"]
+                  for p in ["/etc/resolv.conf", "/var/lib/cni", "/etc/cni/net.d", "/opt/cni/bin", "/var/log", "/var/lib/local-data"]
                 ]),
                 ExecStartPre: [
                   "-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid",
@@ -175,6 +182,7 @@ local sshKeys = [
                     "/etc/kubernetes/inactive-manifests",
                     "/var/lib/cni",
                     "/var/lib/kubelet/volumeplugins",
+                    "/var/lib/local-data",
                   ]),
                 ],
                 // ExecStartPre=/usr/bin/bash -c "grep 'certificate-authority-data' /etc/kubernetes/kubeconfig | awk '{print $2}' | base64 -d > /etc/kubernetes/ca.crt"
@@ -182,7 +190,6 @@ local sshKeys = [
                   "--%s=%s" % kv for kv in kube.objectItems(self.args_)]),
                 // https://github.com/kubernetes/release/blob/master/rpm/10-kubeadm.conf
                 args_:: {
-                  "allow-privileged": true,
                   "anonymous-auth": false,
                   "client-ca-file": "/etc/kubernetes/pki/ca.crt",
                   "authentication-token-webhook": true,
@@ -191,20 +198,19 @@ local sshKeys = [
                   "cluster-domain": "cluster.local",
                   "cert-dir": "/var/lib/kubelet/pki",
                   "exit-on-lock-contention": true,
+                  "pod-max-pids": "10000",
                   "fail-swap-on": false,
                   "hostname-override": "%m",
                   "lock-file": "/var/run/lock/kubelet.lock",
                   "network-plugin": "cni",
                   "cni-conf-dir": "/etc/cni/net.d",
                   "cni-bin-dir": "/opt/cni/bin",
-                  "node-labels": "node-role.kubernetes.io/node",
                   "pod-manifest-path": "/etc/kubernetes/manifests",
                   "rotate-certificates": true,
                   feature_gates_:: {RotateKubeletClientCertificate: true},
                   "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
                   "kubeconfig": "/etc/kubernetes/kubelet.conf",
                   "bootstrap-kubeconfig": "/etc/kubernetes/bootstrap-kubelet.conf",
-                  "cadvisor-port": 0,
                   "volume-plugin-dir": "/var/lib/kubelet/volumeplugins",
                 },
                 ExecStopPre: "-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid",
@@ -266,6 +272,74 @@ local sshKeys = [
     networkd: {},
     passwd: {
       users: [{name: "core", sshAuthorizedKeys: sshKeys}],
+    },
+  },
+
+  post_install: {
+    config: utils.HashedConfigMap("post-install-config") + $.namespace {
+      data+: {
+        [filekey(f.path)]: f.contents_
+        for f in $.ignition_config.storage.files
+        if f.filesystem == "root"
+      } + {
+        ["systemd_" + f.name]: f.contents
+        for f in $.ignition_config.systemd.units
+        if std.objectHas(f, "contents")
+      },
+    },
+
+    deploy: kube.DaemonSet("post-install-updater") + $.namespace {
+      spec+: {
+        template+: {
+          spec+: {
+            nodeSelector+: {
+              // Hijack the updater label
+              "container-linux-update.v1.coreos.com/id": "coreos",
+            },
+            volumes_: {
+              data: kube.ConfigMapVolume($.post_install.config),
+              systemd: kube.HostPathVolume("/etc/systemd/system", "Directory"),
+            } + {
+              [filekey(f.path)]: kube.HostPathVolume(f.path, "FileOrCreate")
+              for f in $.ignition_config.storage.files
+              if f.filesystem == "root" && !std.startsWith(f.path, "/etc/systemd")
+            },
+            containers_: {
+              copier: utils.shcmd("copier") {
+                shcmd: std.join("\n", [
+                  "cat %s > %s" % [
+                    std.escapeStringBash("/in/" + filekey(f.path)),
+                    std.escapeStringBash("/target/" + filekey(f.path))]
+                  for f in $.ignition_config.storage.files
+                  if f.filesystem == "root"
+                ] + [
+                  "cp %s %s" % [
+                    std.escapeStringBash("/in/systemd_" + f.name),
+                    std.escapeStringBash("/systemd/" + f.name)]
+                  for f in $.ignition_config.systemd.units
+                  if std.objectHas(f, "contents")
+                ] + [
+                  "ln -sf /dev/null %s" % [
+                    std.escapeStringBash("/systemd/" + f.name)]
+                  for f in $.ignition_config.systemd.units
+                  if ({mask: false} + f).mask
+                ] + [
+                  "set -x",
+                  "while : ; do sleep 3600; done",
+                ]),
+                volumeMounts_+: {
+                  data: {mountPath: "/in", readOnly: true},
+                  systemd: {mountPath: "/systemd"},
+                } + {
+                  [filekey(f.path)]: {mountPath: "/target/" + filekey(f.path)}
+                  for f in $.ignition_config.storage.files
+                  if f.filesystem == "root" && !std.startsWith(f.path, "/etc/systemd")
+                },
+              },
+            },
+          },
+        },
+      },
     },
   },
 
