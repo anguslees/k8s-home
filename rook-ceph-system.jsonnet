@@ -250,7 +250,7 @@ local version = "v1.0.6";
       labels+: {operator: "rook", "storage-backend": "ceph"},
     },
     spec+: {
-      template+: {
+      template+: utils.CriticalPodSpec {
         spec+: {
           serviceAccountName: $.sa.metadata.name,
           volumes_+: {
