@@ -89,7 +89,8 @@ local kube = import "kube.libsonnet";
       annotations+: {
         "kubernetes.io/tls-acme": "true",
         "kubernetes.io/ingress.class": "nginx",
-        "certmanager.k8s.io/cluster-issuer": "letsencrypt-prod",
+        "cert-manager.io/cluster-issuer": "letsencrypt-prod",
+        "external-dns.alpha.kubernetes.io/target": "webhooks.oldmacdonald.farm",
       },
     },
     spec+: {
@@ -180,7 +181,7 @@ local kube = import "kube.libsonnet";
     spec+: {data: error "(sealed) data required"},
   },
 
-  Certificate(name):: kube._Object("certmanager.k8s.io/v1alpha1", "Certificate", name) {
+  Certificate(name):: kube._Object("cert-manager.io/v1alpha2", "Certificate", name) {
     local this = self,
     host:: error "host is required",
 
@@ -194,7 +195,7 @@ local kube = import "kube.libsonnet";
       dnsNames: [this.host],
       acme: {
         config: [{
-          http01: {},
+          dns01: {},
           domains: this.spec.dnsNames,
         }],
       },
