@@ -1,9 +1,7 @@
 local kube = import "kube.libsonnet";
 
 {
-  // NB: deprecated in 1.14 and removed in 1.18
-  // TODO: Replace with kubernetes.io/arch
-  archSelector(arch):: {"beta.kubernetes.io/arch": arch},
+  archSelector(arch):: {"kubernetes.io/arch": arch},
 
   toleratesMaster:: [{
     key: "node-role.kubernetes.io/master",
@@ -12,13 +10,6 @@ local kube = import "kube.libsonnet";
   }],
 
   CriticalPodSpec:: {
-    // https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/
-    // NB: replaced with "priorities" in k8s >=1.10
-    metadata+: {
-      annotations+: {
-        "scheduler.alpha.kubernetes.io/critical-pod": "",
-      },
-    },
     spec+: {
       priorityClassName: "system-cluster-critical",
       tolerations+: [{

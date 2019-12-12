@@ -3946,7 +3946,7 @@ local ValidatingWebhookConfiguration(name) = kube._Object("admissionregistration
           verbs: ["get", "list", "watch", "create", "delete"],
         },
         {
-          apiGroups: ["extensions"],
+          apiGroups: ["extensions", "networking.k8s.io"],
           resources: ["ingresses"],
           verbs: ["get", "list", "watch", "create", "delete", "update"],
         },
@@ -3978,14 +3978,14 @@ local ValidatingWebhookConfiguration(name) = kube._Object("admissionregistration
           verbs: ["get", "list", "watch"],
         },
         {
-          apiGroups: ["extensions"],
+          apiGroups: ["extensions", "networking.k8s.io"],
           resources: ["ingresses"],
           verbs: ["get", "list", "watch"],
         },
         {
           // For users with OwnerReferencesPermissionEnforcement admin
           // controller enabled
-          apiGroups: ["extensions"],
+          apiGroups: ["extensions", "networking.k8s.io"],
           resources: ["ingresses/finalizers"],
           verbs: ["update"],
         },

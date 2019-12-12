@@ -89,12 +89,12 @@ local metallb = (import "all.jsonnet").metallb;
         verbs: ["get", "list", "watch"],
       },
       {
-        apiGroups: ["extensions"],
+        apiGroups: ["extensions", "networking.k8s.io"],
         resources: ["ingresses"],
         verbs: ["get", "list", "watch"],
       },
       {
-        apiGroups: ["extensions"],
+        apiGroups: ["extensions", "networking.k8s.io"],
         resources: ["ingresses/status"],
         verbs: ["update"],
       },

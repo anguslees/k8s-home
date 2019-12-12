@@ -126,7 +126,7 @@ local path_join(prefix, suffix) = (
           verbs: ["get", "list", "watch"],
         },
         {
-          apiGroups: ["extensions"],
+          apiGroups: ["extensions", "networking.k8s.io"],
           resources: ["ingresses"],
           verbs: ["get", "list", "watch"],
         },
@@ -495,7 +495,7 @@ local path_join(prefix, suffix) = (
           verbs: ["get"],
         },
         {
-          apiGroups: ["extensions"],
+          apiGroups: ["extensions", "apps"],
           resources: ["deployments"],
           resourceNames: ["kube-state-metrics"],
           verbs: ["get", "update"],
