@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local coreos_kubelet_tag = "v1.15.6";
+local coreos_kubelet_tag = "v1.16.3";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)
@@ -100,8 +100,10 @@ local filekey(path) = (
              std.manifestIni({
                sections: {
                  Manager: {
+                   /* Breaks too many things
                    DefaultEnvironment: std.join(" ", [
                      "\"%s=%s\"" % kv for kv in kube.objectItems(default_env)]),
+                    */
                  },
                },
              })),
@@ -212,6 +214,26 @@ local filekey(path) = (
                   "kubeconfig": "/etc/kubernetes/kubelet.conf",
                   "bootstrap-kubeconfig": "/etc/kubernetes/bootstrap-kubelet.conf",
                   "volume-plugin-dir": "/var/lib/kubelet/volumeplugins",
+                  // TODO: compare these to defaults:
+                  "runtime-request-timeout": "10m",
+                  "sync-frequency": "5m",
+                  "eviction-hard": std.join(",", [
+                    "nodefs.available<1Gi",
+                    "imagefs.available<2Gi",
+                  ]),
+                  "eviction-minimum-reclaim": std.join(",", [
+                    "nodefs.available=500Mi",
+                    "imagefs.available=2Gi",
+                  ]),
+                  "eviction-soft": std.join(",", [
+                    "nodefs.available<2Gi",
+                    "imagefs.available<2Gi",
+                  ]),
+                  "eviction-soft-grace-period": std.join(",", [
+                    "imagefs.available=2m",
+                    "nodefs.available=2m",
+                  ]),
+                  "eviction-max-pod-grace-period": "600",
                 },
                 ExecStopPre: "-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid",
                 ExecStop: "-/usr/bin/rkt stop --uuid-file=/var/cache/kubelet-pod.uuid",
@@ -441,7 +463,7 @@ local filekey(path) = (
           default_container: "dnsmasq",
           containers_+: {
             dnsmasq: kube.Container("dnsmasq") {
-              local arch = this.spec.template.spec.nodeSelector["beta.kubernetes.io/arch"],
+              local arch = this.spec.template.spec.nodeSelector["kubernetes.io/arch"],
               local http_url = "http://%s:%d" % ["$(HOST_IP)", $.httpdSvc.spec.ports[0].nodePort],
 
               // TFTP (not DHCP) could be served via a regular
