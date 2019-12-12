@@ -250,7 +250,7 @@ local version = "v1.0.6";
       labels+: {operator: "rook", "storage-backend": "ceph"},
     },
     spec+: {
-      template+: utils.CriticalPodSpec {
+      template+: /* utils.CriticalPodSpec - not allowed outside kube-system */ {
         spec+: {
           serviceAccountName: $.sa.metadata.name,
           volumes_+: {
