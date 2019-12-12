@@ -9,7 +9,11 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local version = "v1.15.6";
+// NB: Kubernetes upgrade order is:
+// 1. apiserver first
+// 2. rest of control plane
+// 3. kubelets
+local version = "v1.16.3";
 
 local externalHostname = "kube.lan";
 local apiServer = "https://%s:6443" % [externalHostname];
@@ -544,6 +548,7 @@ local bootstrapTolerations = [{
                   "watch-cache": "false",  // disable to conserve precious ram
                   //"default-watch-cache-size": "0", // default 100
                   "request-timeout": "5m",
+                  "shutdown-delay-duration": "%ds" % (this.spec.template.spec.terminationGracePeriodSeconds - 5),
                   "max-requests-inflight": "150", // ~15 per 25-30 pods, default 400
                   "target-ram-mb": "500", // ~60MB per 20-30 pods
 
@@ -580,6 +585,7 @@ local bootstrapTolerations = [{
                   timeoutSeconds: 20,
                 },
                 readinessProbe: self.livenessProbe {
+                  httpGet+: {path: "/readyz"},
                   failureThreshold: 2,
                   initialDelaySeconds: 120,
                   successThreshold: 3,
@@ -962,7 +968,7 @@ local bootstrapTolerations = [{
               fallthrough in-addr.arpa ip6.arpa
             }
             prometheus :9153
-            proxy . /etc/resolv.conf
+            forward . /etc/resolv.conf
             cache 30
             loop
             loadbalance
@@ -1018,7 +1024,7 @@ local bootstrapTolerations = [{
             },
             containers_+: {
               coredns: kube.Container("coredns") {
-                image: "k8s.gcr.io/coredns:1.3.1",
+                image: "k8s.gcr.io/coredns:1.6.2",
                 resources+: {
                   limits: {memory: "170Mi"},
                   requests: {cpu: "100m", memory: "70Mi"},
