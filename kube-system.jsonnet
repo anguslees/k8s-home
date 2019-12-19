@@ -530,6 +530,7 @@ local bootstrapTolerations = [{
                   "kubelet-preferred-address-types": "InternalIP,ExternalIP,Hostname",
                   "enable-admission-plugins": "NodeRestriction",
                   //"anonymous-auth": "false", bootkube has this, but not kubeadm
+                  "profiling": "false",
                   "allow-privileged": "true",
                   "service-cluster-ip-range": serviceClusterCidr,
                   // Flag --insecure-port has been deprecated, This flag will be removed in a future version.
