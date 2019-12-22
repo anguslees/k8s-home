@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local utils = import "utils.libsonnet";
 
 // aka lts-alpine
-local version = "2.164.3-alpine";
+local version = "2.176.2-alpine";
 
 {
   namespace:: {metadata+: {namespace: "jenkins"}},
