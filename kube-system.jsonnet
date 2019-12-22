@@ -570,6 +570,10 @@ local bootstrapTolerations = [{
                   "requestheader-username-headers": "X-Remote-User",
                   "requestheader-group-headers": "X-Remote-Group",
                   "requestheader-client-ca-file": "/keys/front-proxy-ca/tls.crt",
+
+                  // Workaround old coreos update-operator code.
+                  // https://github.com/coreos/container-linux-update-operator/issues/196
+                  "runtime-config": "extensions/v1beta1/daemonsets=true",
                 },
                 env_+: {
                   POD_IP: kube.FieldRef("status.podIP"),
