@@ -471,7 +471,7 @@ local path_join(prefix, suffix) = (
       local listwatch = {
         "": ["nodes", "pods", "services", "resourcequotas", "replicationcontrollers", "limitranges", "persistentvolumeclaims", "namespaces"],
         extensions: ["daemonsets", "deployments", "replicasets"],
-        apps: ["statefulsets"],
+        apps: ["statefulsets"] + self.extensions,
         batch: ["cronjobs", "jobs"],
       },
       all_resources:: std.set(std.flattenArrays(kube.objectValues(listwatch))),
