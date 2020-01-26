@@ -178,6 +178,7 @@ local bootstrapTolerations = [{
                   ETCDCTL_CACERT: "/keys/etcd-ca/ca.crt",
                   ETCDCTL_CERT: "/keys/etcd-client/tls.crt",
                   ETCDCTL_KEY: "/keys/etcd-client/tls.key",
+                  GOGC: "25",
                 },
                 livenessProbe: {
                   local probe = self,
@@ -445,6 +446,7 @@ local bootstrapTolerations = [{
                 env_+: {
                   NODE_NAME: kube.FieldRef("spec.nodeName"),
                   POD_IP: kube.FieldRef("status.podIP"),
+                  GOGC: "25",
                 },
                 ports_+: {
                   metrics: {containerPort: 10249},
@@ -577,6 +579,7 @@ local bootstrapTolerations = [{
                 },
                 env_+: {
                   POD_IP: kube.FieldRef("status.podIP"),
+                  GOGC: "25",
                 },
                 ports_+: {
                   https: {containerPort: 6443, protocol: "TCP"},
@@ -745,6 +748,9 @@ local bootstrapTolerations = [{
                   "cluster-signing-cert-file": "/keys/ca/tls.crt",
                   "cluster-signing-key-file": "/keys/ca/tls.key",
                 },
+                env_+: {
+                  GOGC: "25",
+                },
                 livenessProbe: {
                   httpGet: {path: "/healthz", port: 10252, scheme: "HTTP"},
                   initialDelaySeconds: 180,
@@ -828,6 +834,9 @@ local bootstrapTolerations = [{
                   "leader-elect-lease-duration": "300s", // default 15s
                   "leader-elect-renew-deadline": "270s", // default 10s
                   "leader-elect-retry-period": "20s", // default 2s
+                },
+                env_+: {
+                  GOGC: "25",
                 },
                 livenessProbe: {
                   httpGet: {path: "/healthz", port: 10251, scheme: "HTTP"},
@@ -921,6 +930,7 @@ local bootstrapTolerations = [{
                   NODE_NAME: kube.FieldRef("spec.nodeName"),
                   POD_NAME: kube.FieldRef("metadata.name"),
                   POD_NAMESPACE: kube.FieldRef("metadata.namespace"),
+                  GOGC: "25",
                 },
                 volumeMounts_+: {
                   kubeconfig: {mountPath: "/etc/checkpointer"},
@@ -1044,6 +1054,9 @@ local bootstrapTolerations = [{
                 },
                 args_+: {
                   conf: "/etc/coredns/Corefile",
+                },
+                env_+: {
+                  GOGC: "25",
                 },
                 volumeMounts_+: {
                   config: {mountPath: "/etc/coredns", readOnly: true},
@@ -1178,6 +1191,9 @@ local bootstrapTolerations = [{
                   "kubelet-insecure-tls": "true",
                   "requestheader-client-ca-file": "/keys/front-proxy-ca/tls.crt",
                   "requestheader-allowed-names": "front-proxy-client",
+                },
+                env_+: {
+                  GOGC: "25",
                 },
                 ports_+: {
                   https: {containerPort: 8443, protocol: "TCP"},
