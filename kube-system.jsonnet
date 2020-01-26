@@ -622,8 +622,10 @@ local bootstrapTolerations = [{
     //  },
     //},
 
-    deploy: kube.DaemonSet("kube-apiserver") + $.namespace + $.apiserver.commonDeploy {
+    deploy: kube.Deployment("kube-apiserver") + $.namespace + $.apiserver.commonDeploy {
+      local this = self,
       spec+: {
+        replicas: 2,
         template+: {
           metadata+: {
             annotations+: {
@@ -649,6 +651,12 @@ local bootstrapTolerations = [{
                     }),
                   ],
                 },
+              },
+              podAntiAffinity: {
+                requiredDuringSchedulingIgnoredDuringExecution: [{
+                  labelSelector: labelSelector(this.spec.template.metadata.labels),
+                  topologyKey: "kubernetes.io/hostname",
+                }],
               },
             },
             tolerations+: utils.toleratesMaster + [{
