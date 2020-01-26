@@ -327,7 +327,7 @@ local filekey(path) = (
               for f in $.ignition_config.storage.files
               if f.filesystem == "root" && !std.startsWith(f.path, "/etc/systemd")
             },
-            containers_: {
+            initContainers_+: {
               copier: utils.shcmd("copier") {
                 shcmd: std.join("\n", [
                   "cat %s > %s" % [
@@ -346,9 +346,6 @@ local filekey(path) = (
                     std.escapeStringBash("/systemd/" + f.name)]
                   for f in $.ignition_config.systemd.units
                   if ({mask: false} + f).mask
-                ] + [
-                  "set -x",
-                  "while : ; do sleep 3600; done",
                 ]),
                 volumeMounts_+: {
                   data: {mountPath: "/in", readOnly: true},
@@ -360,6 +357,11 @@ local filekey(path) = (
                 },
               },
             },
+            containers_: {
+              pause: kube.Container("pause") {
+                image: "k8s.gcr.io/pause:3.1",
+              },
+            },
           },
         },
       },
@@ -367,18 +369,30 @@ local filekey(path) = (
   },
 
   ipxe_config: kube.ConfigMap("ipxe-config") + $.namespace {
+    local http_url = "http://kube.lan:%d" % [$.httpdSvc.spec.ports[0].nodePort],
     data: {
       "boot.ipxe": |||
         #!ipxe
+        set http_url %s
 
         #set base-url http://beta.release.core-os.net/amd64-usr/current
         # Local IPFS copy, cached on 2018-09-19:
         set base-url http://ipfs.k.lan/ipfs/QmeWaqrxn3PGrxbVfeejQDHPLjA6ETpQcX3epf7avaPwSg
-        # coreos.first_boot=1 coreos.config.url=https://example.com/pxe-config.ign
-        kernel ${base-url}/coreos_production_pxe.vmlinuz initrd=coreos_production_pxe_image.cpio.gz coreos.autologin=tty1
+        prompt -k 0x197e -t 2000 Press F12 to install CoreOS to disk || exit
+        kernel ${base-url}/coreos_production_pxe.vmlinuz initrd=coreos_production_pxe_image.cpio.gz coreos.autologin=tty1 root=LABEL=ROOT coreos.first_boot=1 coreos.config.url=${http_url}/coreos-kube.ign
         initrd ${base-url}/coreos_production_pxe_image.cpio.gz
+
+        # Fedora CoreOS (WIP)
+        #set base-url http://ipfs.k.lan/ipfs/QmWMuK5PN4nQWo6eCAnYo3YP2L3PsoKUULGsM5bfuYZp6w
+        #set name fedora-coreos-31.20200113.3.1-live
+        #cpuid --ext 29 && set arch x86_64 || set arch x86
+        #prompt -k 0x197e -t 2000 Press F12 to install ${name} to disk || exit
+        #kernel ${base-url}/${name}-kernel-${arch} ip=dhcp rd.neednet=1 initrd=${name}-initramfs.${arch}.img console=tty0 console=ttyS0 coreos.inst.install_dev=/dev/sda coreos.inst.stream=stable coreos.inst.ignition_url=${http_url}/coreos-kube.ign BOOTIF=01-${net0/mac}
+        #initrd ${base-url}/${name}-initramfs.${arch}.img
+
         boot
-	|||,
+	||| % [http_url],
+
       // Just because I can ...
       "winpe.ipxe": |||
         #!ipxe
