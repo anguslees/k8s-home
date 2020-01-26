@@ -9,11 +9,12 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-// NB: Kubernetes upgrade order is:
+// NB: Kubernetes (minor semver) upgrade order is:
 // 1. apiserver first
 // 2. rest of control plane
-// 3. kubelets
-local version = "v1.16.3";
+// 3. kubelets (see coreos-pxe-install.jsonnet:coreos_kubelet_tag)
+local apiserverVersion = "v1.17.1";
+local version = apiserverVersion;
 
 local externalHostname = "kube.lan";
 local apiServer = "https://%s:6443" % [externalHostname];
@@ -141,7 +142,7 @@ local bootstrapTolerations = [{
             },
             containers_+: {
               etcd: kube.Container("etcd") {
-                image: "gcr.io/etcd-development/etcd:v3.3.17",
+                image: "gcr.io/etcd-development/etcd:v3.4.3",
                 securityContext+: {
                   allowPrivilegeEscalation: false,
                 },
@@ -524,7 +525,7 @@ local bootstrapTolerations = [{
             },
             containers_+: {
               apiserver: kube.Container("apiserver") {
-                image: "k8s.gcr.io/kube-apiserver:%s" % [version],
+                image: "k8s.gcr.io/kube-apiserver:%s" % [apiserverVersion],
                 command: ["kube-apiserver"],
                 args_+: {
                   "endpoint-reconciler-type": "lease",

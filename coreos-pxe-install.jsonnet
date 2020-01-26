@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local coreos_kubelet_tag = "v1.16.3";
+local coreos_kubelet_tag = "v1.17.1";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)
@@ -89,6 +89,7 @@ local filekey(path) = (
         file("/etc/kubernetes/kubelet.env", |||
                KUBELET_IMAGE_URL=docker://gcr.io/google-containers/hyperkube
                KUBELET_IMAGE_TAG=%(tag)s
+               KUBELET_IMAGE_ARGS=--exec=kubelet
                RKT_GLOBAL_ARGS="--insecure-options=image"
              ||| % {tag: coreos_kubelet_tag},
             ),
