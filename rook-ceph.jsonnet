@@ -5,7 +5,7 @@ local rookCephSystem = import "rook-ceph-system.jsonnet";
 local arch = "amd64";
 
 // https://hub.docker.com/r/ceph/ceph/tags
-local cephVersion = "v13.2.5-20190410";
+local cephVersion = "v14.2.6-20200115";
 
 {
   namespace:: {metadata+: {namespace: "rook-ceph"}},
@@ -127,13 +127,11 @@ local cephVersion = "v13.2.5-20190410";
         count: 3,
         allowMultiplePerNode: false,
       },
-      /* Enable once on ceph v14.2.x or newer
       mgr: {
         modules: [
           {name: "pg_autoscaler", enabled: true},
         ],
       },
-       */
       dashboard: {
         enabled: true,
         port: 8443,

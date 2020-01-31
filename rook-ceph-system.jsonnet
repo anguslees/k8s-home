@@ -587,6 +587,11 @@ local version = "v1.1.9";
         verbs: ["get", "list", "watch"],
       },
       {
+        apiGroups: ["storage.k8s.io"],
+        resources: ["volumeattachments"],
+        verbs: ["get", "list", "watch", "update"],
+      },
+      {
         apiGroups: [""],
         resources: ["events"],
         verbs: ["get", "list", "watch", "update", "create", "patch"],
@@ -743,6 +748,11 @@ local version = "v1.1.9";
         apiGroups: ["snapshot.storage.k8s.io"],
         resources: ["volumesnapshots"],
         verbs: ["get", "list", "watch", "update"],
+      },
+      {
+        apiGroups: ["snapshot.storage.k8s.io"],
+        resources: ["volumesnapshotcontents"],
+        verbs: ["create", "get", "list", "watch", "update", "delete"],
       },
       {
         apiGroups: ["snapshot.storage.k8s.io"],
