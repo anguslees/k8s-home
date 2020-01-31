@@ -228,7 +228,24 @@ local cephVersion = "v14.2.6-20200115";
     },
   },
 
-  // NB: Still needs provisioner + storageclass support in rook
+  blockCsi: kube.StorageClass("csi-ceph-block") {
+    provisioner: rookCephSystem.cephSystem.metadata.namespace + ".rbd.csi.ceph.com",
+    parameters: {
+      clusterID: $.cluster.metadata.namespace,
+      pool: $.replicapool.metadata.name,
+      imageFormat: "2",
+      imageFeatures: "layering",
+
+      "csi.storage.k8s.io/provisioner-secret-name": "rook-csi-rbd-provisioner",
+      "csi.storage.k8s.io/provisioner-secret-namespace": self.clusterID,
+      "csi.storage.k8s.io/node-stage-secret-name": "rook-csi-rbd-node",
+      "csi.storage.k8s.io/node-stage-secret-namespace": self.clusterID,
+
+      "csi.storage.k8s.io/fstype": "ext4",
+    },
+  },
+
+  // NB: Still needs provisioner support in rook
   filesystem: rookCephSystem.CephFilesystem("ceph-filesystem") + $.namespace {
     local this = self,
     spec+: {
@@ -262,6 +279,19 @@ local cephVersion = "v14.2.6-20200115";
           },
         },
       },
+    },
+  },
+
+  cephfsCsi: kube.StorageClass("csi-cephfs") {
+    provisioner: rookCephSystem.cephSystem.metadata.namespace + ".cephfs.csi.ceph.com",
+    parameters: {
+      clusterID: $.cluster.metadata.namespace,
+      fsName: $.filesystem.metadata.name,
+      pool: self.fsName + "-data0",
+      "csi.storage.k8s.io/provisioner-secret-name": "rook-csi-cephfs-provisioner",
+      "csi.storage.k8s.io/provisioner-secret-namespace": self.clusterID,
+      "csi.storage.k8s.io/node-stage-secret-name": "rook-csi-cephfs-node",
+      "csi.storage.k8s.io/node-stage-secret-namespace": self.clusterID,
     },
   },
 
