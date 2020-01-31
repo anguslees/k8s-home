@@ -45,6 +45,23 @@ local cephVersion = "v13.2.5-20190410";
     subjects_+: [$.osdSa],
   },
 
+  reporterSa: kube.ServiceAccount("rook-ceph-cmd-reporter") + $.namespace,
+
+  reporterRole: kube.Role("rook-ceph-cmd-reporter") + $.namespace {
+    rules: [
+      {
+        apiGroups: [""],
+        resources: ["pods", "configmaps"],
+        verbs: ["get", "list", "watch", "create", "update", "delete"],
+      },
+    ],
+  },
+
+  reporterRoleBinding: kube.RoleBinding("rook-ceph-cmd-reporter") + $.namespace {
+    roleRef_: $.reporterRole,
+    subjects_+: [$.reporterSa],
+  },
+
   mgrRole: kube.Role("rook-ceph-mgr") + $.namespace {
     rules: [
       {
@@ -110,8 +127,17 @@ local cephVersion = "v13.2.5-20190410";
         count: 3,
         allowMultiplePerNode: false,
       },
+      /* Enable once on ceph v14.2.x or newer
+      mgr: {
+        modules: [
+          {name: "pg_autoscaler", enabled: true},
+        ],
+      },
+       */
       dashboard: {
         enabled: true,
+        port: 8443,
+        ssl: true,
       },
       network: {
         hostNetwork: false,
@@ -156,7 +182,7 @@ local cephVersion = "v13.2.5-20190410";
             path: "/",
             backend: {
               serviceName: "rook-ceph-mgr-dashboard",
-              servicePort: 8443,
+              servicePort: "https-dashboard",
             },
           }],
         },
