@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local coreos_kubelet_tag = "v1.17.1";
+local coreos_kubelet_tag = "v1.17.3";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)

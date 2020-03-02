@@ -13,7 +13,7 @@ local utils = import "utils.libsonnet";
 // 1. apiserver first
 // 2. rest of control plane
 // 3. kubelets (see coreos-pxe-install.jsonnet:coreos_kubelet_tag)
-local apiserverVersion = "v1.17.1";
+local apiserverVersion = "v1.17.3";
 local version = apiserverVersion;
 
 local externalHostname = "kube.lan";

@@ -9,32 +9,11 @@ local jenkins = import "jenkins.jsonnet";
 {
   namespace:: jenkins.namespace,
 
-  // No dynamic provisioning for rook-cephfs yet - so use static PV
-  scratchVolume: kube.PersistentVolume("oe-scratch") {
-    spec+: {
-      storageClassName: "",  // no storage class
-      capacity: {storage: "200Gi"},
-      accessModes: ["ReadWriteMany"],
-      persistentVolumeReclaimPolicy: "Retain",
-      flexVolume: {
-        driver: "ceph.rook.io/rook",
-        fsType: "ceph",
-        options: {
-          fsName: "ceph-filesystem",
-          clusterNamespace: "rook-ceph",
-        },
-      },
-    },
-  },
-
   scratch: kube.PersistentVolumeClaim("oe-scratch") + $.namespace {
-    storageClass: "", // no storage class
-    storage: $.scratchVolume.spec.capacity.storage,
+    storageClass: "csi-cephfs", // no storage class
+    storage: "200Gi",
     spec+: {
       accessModes: ["ReadWriteMany"],
-      selector: {
-        matchLabels: $.scratchVolume.metadata.labels,
-      },
     },
   },
 
