@@ -26,7 +26,12 @@ String dndStart   "DND Start Time [%s]" <clock>   (gVacDND) {channel="miio:vacuu
 String dndEnd   "DND End Time [%s]"   <clock-on>  (gVacDND) {channel="miio:vacuum:04EFDA6D:dnd#dnd_end"}
 
 Number historyArea    "Total Cleaned Area [%1.0fm²]" <zoom>    (gVacHist) {channel="miio:vacuum:04EFDA6D:history#total_clean_area"}
-String historyTime    "Total Clean Time [%s]"   <clock>     (gVacHist) {channel="miio:vacuum:04EFDA6D:history#total_clean_time"}
-Number historyCount    "Total # Cleanings [%1.0f]"  <office>  (gVacHist) {channel="miio:vacuum:04EFDA6D:history#total_clean_count"}
+String historyTime    "Total Clean Time   [%s]"      <clock>   (gVacHist) {channel="miio:vacuum:04EFDA6D:history#total_clean_time"}
+Number historyCount   "Total # Cleanings  [%1.0f]"   <office>  (gVacHist) {channel="miio:vacuum:04EFDA6D:history#total_clean_count"}
 
-Switch actionVacuum "Vacuum" (gVac) <fan> {channel="miio:vacuum:04EFDA6D:actions#vacuum"} ["Switchable"]
+Switch actionVacuum "Vacuum" <fan> (gVac) {channel="miio:vacuum:04EFDA6D:actions#vacuum"} ["Switchable"]
+
+String Vacuum_Action_Control "Control" (Vacuum) { channel="miio:vacuum:04EFDA6D:actions#control" }
+String Vacuum_Action_Command "Command" { channel="miio:vacuum:04EFDA6D:actions#commands" }
+String Vacuum_Control "Control" { expire="1s,state=UNDEF" }
+String Vacuum_Zone "Zone [%s]" <floor_plan>

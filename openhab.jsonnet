@@ -20,7 +20,6 @@ local utils = import "utils.libsonnet";
     items: utils.HashedConfigMap("openhab-items") + $.namespace {
       data+: {
         "senseme.items": (importstr "openhab/items/senseme.items"),
-        "kodi.items": (importstr "openhab/items/kodi.items"),
         "xiaomivacuum.items": (importstr "openhab/items/xiaomivacuum.items"),
       },
     },
@@ -28,15 +27,15 @@ local utils = import "utils.libsonnet";
     sitemaps: utils.HashedConfigMap("openhab-sitemaps") + $.namespace {
       data+: {
         "senseme.sitemap": (importstr "openhab/sitemaps/senseme.sitemap"),
-        "kodi.sitemap": (importstr "openhab/sitemaps/kodi.sitemap"),
       },
     },
 
     things: utils.HashedConfigMap("openhab-things") + $.namespace {
       data+: {
         "senseme.things": (importstr "openhab/things/senseme.things"),
-        "kodi.things": (importstr "openhab/things/kodi.things"),
         "chromecast.things": (importstr "openhab/things/chromecast.things"),
+        "lifx.things": (importstr "openhab/things/lifx.things"),
+        "xiaomivacuum.things": (importstr "openhab/things/xiaomivacuum.things"),
       },
     },
 
@@ -98,7 +97,7 @@ local utils = import "utils.libsonnet";
               image: this.spec.template.spec.containers_.openhab.image,
               command: ["/bin/sh", "-x", "-e", "-c", self.shcmd],
               shcmd:: |||
-                cp -av /openhab/conf.dist/. /openhab/conf/
+                cp -av /openhab/dist/conf/* /openhab/conf/
                 cd /config
                 for d in *; do
                   mkdir -p /openhab/conf/$d
@@ -121,7 +120,7 @@ local utils = import "utils.libsonnet";
               command: ["/bin/sh", "-x", "-e", "-c", self.shcmd],
               shcmd:: |||
                 if [ ! -f /openhab/userdata/etc/version.properties ]; then
-                  cp -av /openhab/userdata.dist/. /openhab/userdata/
+                  cp -av /openhab/dist/userdata/* /openhab/userdata/
                 fi
               |||,
               volumeMounts_+: {
@@ -132,10 +131,7 @@ local utils = import "utils.libsonnet";
           containers_+: {
             openhab: kube.Container("openhab") {
               local container = self,
-              image: "openhab/openhab:2.4.0-alpine",
-              command: ["/entrypoint.sh", "su-exec", "openhab", "./start.sh"],
-              tty: true,  // Required for odd kafka console thing
-              stdin: true,
+              image: "openhab/openhab:2.5.1",
               ports_+: {
                 http: {containerPort: 8080},
                 https: {containerPort: 8443},
@@ -155,8 +151,8 @@ local utils = import "utils.libsonnet";
                 LANG: self.LANGUAGE,
               },
               resources: {
-                requests: {cpu: "10m", memory: "500Mi"},
-                limits: {cpu: "1000m", memory: "600Mi"},
+                requests: {cpu: "10m", memory: "600Mi"},
+                limits: {cpu: "1000m", memory: "700Mi"},
               },
               volumeMounts_+: {
                 //usbacm: {mountPath: "/dev/ttyACM0"},
