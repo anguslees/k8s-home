@@ -16,14 +16,8 @@
     prometheus_svc: $.prometheus.prometheus.svc,
   },
 
-  nfs: (import "nfs.jsonnet") {
-    storageClass+: {
-      metadata+: {
-        // There can be only one default, so set here rather than nfs.jsonnet
-        annotations+: {"storageclass.kubernetes.io/is-default-class": "true"},
-      },
-    },
-  },
+  local_volume: import "local-volume.jsonnet",
+  nfs: import "nfs.jsonnet",
 
   prometheus: (import "prometheus.jsonnet") {
     config+: {global+: {external_labels+: {cluster: "home"}}},
@@ -35,7 +29,14 @@
   },
 
   rook_ceph_system: import "rook-ceph-system.jsonnet",
-  rook_ceph: import "rook-ceph.jsonnet",
+  rook_ceph: (import "rook-ceph.jsonnet") {
+    blockCsi+: {
+      metadata+: {
+        // There can be only one default, so set here rather than rook-ceph.jsonnet
+        annotations+: {"storageclass.kubernetes.io/is-default-class": "true"},
+      },
+    },
+  },
 
   webcache: import "webcache.jsonnet",
   mail: import "mail.jsonnet",
