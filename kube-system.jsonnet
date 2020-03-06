@@ -21,6 +21,7 @@ local apiServer = "https://%s:6443" % [externalHostname];
 local clusterCidr = "10.244.0.0/16";
 local serviceClusterCidr = "10.96.0.0/12";
 local dnsIP = "10.96.0.10";
+local dnsDomain = "cluster.local";
 
 // NB: these IPs are also burnt into the peer/server certificates,
 // because of the golang TLS verification wars.
@@ -986,7 +987,7 @@ local bootstrapTolerations = [{
               lameduck 40s
             }
             log
-            kubernetes cluster.local in-addr.arpa ip6.arpa {
+            kubernetes %(dnsDomain)s in-addr.arpa ip6.arpa {
               pods insecure
               upstream
               fallthrough in-addr.arpa ip6.arpa
@@ -998,7 +999,7 @@ local bootstrapTolerations = [{
             loadbalance
             # Note no 'reload' since we use HashedConfigMap
           }
-        |||,
+        ||| % {dnsDomain: dnsDomain},
       },
     },
 
