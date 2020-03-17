@@ -103,9 +103,15 @@ local cniplugins_version = "v0.8.3";
 	  containers_+: {
 	    default: kube.Container("kube-flannel") {
 	      image: "quay.io/coreos/flannel:%s-%s" % [flannel_version, this.arch],
-	      command: ["/opt/bin/flanneld", "--ip-masq", "--kube-subnet-mgr", "--iface=$(POD_IP)"],
+	      command: ["/opt/bin/flanneld"],
+              args_+: {
+                "ip-masq": true,
+                "kube-subnet-mgr": true,
+                "iface": "$(POD_IP)",
+              },
 	      securityContext+: {
-		privileged: true,
+		privileged: false,
+                capabilities: {add: ["NET_ADMIN"]},
 	      },
 	      env_: {
 		POD_NAME: kube.FieldRef("metadata.name"),
