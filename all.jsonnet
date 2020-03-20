@@ -1,7 +1,7 @@
 {
   kube_system: import "kube-system.jsonnet",
 
-  flannel: import "flannel.jsonnet",
+  calico: import "calico.jsonnet",
 
   ssecrets: import "sealed-secrets.jsonnet",
 

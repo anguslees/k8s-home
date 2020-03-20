@@ -173,7 +173,7 @@ local filekey(path) = (
                     "-", std.join("", [if utils.isalpha(c) then c else "-"
                       for c in std.stringChars(path)]));
                   "--volume=%(n)s,kind=host,source=%(p)s --mount volume=%(n)s,target=%(p)s" % {n: name(p), p: p}
-                  for p in ["/etc/resolv.conf", "/var/lib/cni", "/etc/cni/net.d", "/opt/cni/bin", "/var/log", "/var/lib/local-data"]
+                  for p in ["/etc/resolv.conf", "/var/lib/cni", "/etc/cni/net.d", "/opt/cni/bin", "/var/log", "/var/lib/local-data", "/var/lib/calico"]
                 ]),
                 ExecStartPre: [
                   "-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid",
@@ -186,6 +186,7 @@ local filekey(path) = (
                     "/var/lib/cni",
                     "/var/lib/kubelet/volumeplugins",
                     "/var/lib/local-data",
+                    "/var/lib/calico",
                   ]),
                 ],
                 // ExecStartPre=/usr/bin/bash -c "grep 'certificate-authority-data' /etc/kubernetes/kubeconfig | awk '{print $2}' | base64 -d > /etc/kubernetes/ca.crt"
