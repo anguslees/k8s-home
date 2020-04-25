@@ -381,18 +381,12 @@ local cephVersion = "v14.2.6-20200115";
                   nodeSelectorTerms: [
                     {
                       matchExpressions: [{
-                        key: "container-linux-update.v1.coreos.com/%s-reboot" % beforeAfter,
+                        key: "%s-linux-update.v1.coreos.com/%s-reboot" % [flavour, beforeAfter],
                         operator: "In",
                         values: ["true"],
                       }],
                     },
-                    {
-                      matchExpressions: [{
-                        key: "flatcar-linux-update.v1.coreos.com/%s-reboot" % beforeAfter,
-                        operator: "In",
-                        values: ["true"],
-                      }],
-                    },
+                    for flavour in ["coreos", "flatcar"]
                   ],
                 },
               },
