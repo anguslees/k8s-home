@@ -375,8 +375,27 @@ local cephVersion = "v14.2.6-20200115";
         template+: {
           spec+: {
             serviceAccountName: $.rebootScriptSa.metadata.name,
-            nodeSelector+: {
-              ["container-linux-update.v1.coreos.com/%s-reboot" % beforeAfter]: "true",
+            affinity: {
+              nodeAffinity: {
+                requiredDuringSchedulingIgnoredDuringExecution: {
+                  nodeSelectorTerms: [
+                    {
+                      matchExpressions: [{
+                        key: "container-linux-update.v1.coreos.com/%s-reboot" % beforeAfter,
+                        operator: "In",
+                        values: ["true"],
+                      }],
+                    },
+                    {
+                      matchExpressions: [{
+                        key: "flatcar-linux-update.v1.coreos.com/%s-reboot" % beforeAfter,
+                        operator: "In",
+                        values: ["true"],
+                      }],
+                    },
+                  ],
+                },
+              },
             },
             tolerations+: utils.toleratesMaster,
             volumes_+: {
