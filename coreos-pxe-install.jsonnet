@@ -41,183 +41,185 @@ local filekey(path) = (
     },
   },
   cloud_config_:: {
-    local unit(name, hascontent=true) = {
-      name: name,
-      runtime: true,
-      content_:: {},
-      [if hascontent then "content"]: std.manifestIni(self.content_),
-    },
-    units: [
-      unit("docker.service", false) {
-        enable: false,  // started on-demand via docker.socket
+    coreos: {
+      local unit(name, hascontent=true) = {
+        name: name,
+        runtime: true,
+        content_:: {},
+        [if hascontent then "content"]: std.manifestIni(self.content_),
       },
-      unit("update-engine.service", false) {
-        enable: true,
-      },
-      unit("locksmithd.service", false) {
-        enable: false,
-        mask: true,
-      },
-      unit("kubelet.path") {
-        enable: true,
-        content_:: {
-          sections: {
-            Unit: {
-              Description: "Watch for kubeconfig",
-            },
-            Path: {
-              PathExists: "/etc/kubernetes/kubelet.conf",
-            },
-            Install: {
-              WantedBy: "multi-user.target",
-            },
-          },
+      units: [
+        unit("docker.service", false) {
+          enable: false,  // started on-demand via docker.socket
         },
-      },
-      unit("kubelet.service") {
-        content_:: {
-          sections: {
-            Unit: {
-              Description: "Kubelet via Hyperkube ACI",
-              After: "network.target docker.socket",
-              Wants: "docker.socket",
-            },
-            Service: {
-              EnvironmentFile: "/etc/kubernetes/kubelet.env",
-              Environment: 'RKT_RUN_ARGS="%s"' % std.join(" ", [
-                "--uuid-file-save=/var/cache/kubelet-pod.uuid",
-              ] + [
-                local name(path) = utils.stripLeading(
-                  "-", std.join("", [if utils.isalpha(c) then c else "-"
-                    for c in std.stringChars(path)]));
-                "--volume=%(n)s,kind=host,source=%(p)s --mount volume=%(n)s,target=%(p)s" % {n: name(p), p: p}
-                for p in ["/etc/resolv.conf", "/var/lib/cni", "/etc/cni/net.d", "/opt/cni/bin", "/var/log", "/var/lib/local-data", "/var/lib/calico"]
-              ]),
-              ExecStartPre: [
-                "-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid",
-                "/bin/mkdir -p " + std.join(" ", [
-                  "/opt/cni/bin",
-                  "/etc/kubernetes/manifests",
-                  "/etc/cni/net.d",
-                  "/etc/kubernetes/checkpoint-secrets",
-                  "/etc/kubernetes/inactive-manifests",
-                  "/var/lib/cni",
-                  "/var/lib/kubelet/volumeplugins",
-                  "/var/lib/local-data",
-                  "/var/lib/calico",
-                ]),
-              ],
-              // ExecStartPre=/usr/bin/bash -c "grep 'certificate-authority-data' /etc/kubernetes/kubeconfig | awk '{print $2}' | base64 -d > /etc/kubernetes/ca.crt"
-              ExecStart: std.join(" ", ["/usr/lib/coreos/kubelet-wrapper"] + [
-                "--%s=%s" % kv for kv in kube.objectItems(self.args_)]),
-              // https://github.com/kubernetes/release/blob/master/rpm/10-kubeadm.conf
-              args_:: {
-                "anonymous-auth": false,
-                "client-ca-file": "/etc/kubernetes/pki/ca.crt",
-                "authentication-token-webhook": true,
-                "authorization-mode": "Webhook",
-                "cluster-dns": "10.96.0.10",
-                "cluster-domain": "cluster.local",
-                "cert-dir": "/var/lib/kubelet/pki",
-                "exit-on-lock-contention": true,
-                "pod-max-pids": "10000",
-                "fail-swap-on": false,
-                "cgroup-driver": "systemd",
-                "hostname-override": "%m",
-                "lock-file": "/var/run/lock/kubelet.lock",
-                "network-plugin": "cni",
-                "cni-conf-dir": "/etc/cni/net.d",
-                "cni-bin-dir": "/opt/cni/bin",
-                "pod-manifest-path": "/etc/kubernetes/manifests",
-                "rotate-certificates": true,
-                "rotate-server-certificates": true,
-                feature_gates_:: {},
-                "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
-                "tls-min-version": "VersionTLS12",
-                "tls-cipher-suites": "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_128_GCM_SHA256",
-                "serialize-image-pulls": false,
-                "kubeconfig": "/etc/kubernetes/kubelet.conf",
-                "bootstrap-kubeconfig": "/etc/kubernetes/bootstrap-kubelet.conf",
-                "volume-plugin-dir": "/var/lib/kubelet/volumeplugins",
-                // TODO: compare these to defaults:
-                  "runtime-request-timeout": "10m",
-                "sync-frequency": "5m",
-                eviction_:: {
-                  "nodefs.available": {
-                    hard: "1Gi",
-                    soft: "2Gi",
-                    minimum_reclaim: "500Mi",
-                    soft_grace_period: "2m",
-                  },
-                  "imagefs.available": {
-                    hard: "2Gi",
-                    soft: "2Gi",
-                    minimum_reclaim: "2Gi",
-                    soft_grace_period: "2m",
-                  },
-                },
-                local manifestEviction(key, template) = std.join(",", [
-                  template % [kv[0], kv[1][key]] for kv in kube.objectItems(self.eviction_)
-                  if std.objectHas(kv[1], key)
-                ]),
-                "eviction-hard": manifestEviction("hard", "%s<%s"),
-                "eviction-minimum-reclaim": manifestEviction("minimum_reclaim", "%s=%s"),
-                "eviction-soft": manifestEviction("soft", "%s<%s"),
-                "eviction-soft-grace-period": manifestEviction("soft_grace_period", "%s=%s"),
-                "eviction-max-pod-grace-period": "600",
+        unit("update-engine.service", false) {
+          enable: true,
+        },
+        unit("locksmithd.service", false) {
+          enable: false,
+          mask: true,
+        },
+        unit("kubelet.path") {
+          enable: true,
+          content_:: {
+            sections: {
+              Unit: {
+                Description: "Watch for kubeconfig",
               },
-              ExecStop: "-/usr/bin/rkt stop --uuid-file=/var/cache/kubelet-pod.uuid",
-              ExecStopPost: "-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid",
-              Restart: "always",
-              RestartSec: "5",
-            },
-            Install: {
-              WantedBy: "multi-user.target",
-            },
-          },
-        },
-      },
-      unit("create-swapfile.service") {
-        content_:: {
-          sections: {
-            Unit: {
-              Description: "Create a swapfile",
-              RequiresMountsFor: "/var",
-              ConditionPathExists: "!/var/vm/swapfile1",
-              // Avoid (circular) dependency on basic.target
-              DefaultDependencies: "no",
-            },
-            Service: {
-              Type: "oneshot",
-              ExecStart: [
-                "/usr/bin/mkdir -p /var/vm",
-                "/usr/bin/fallocate -l 8GiB /var/vm/swapfile1",
-                "/usr/bin/chmod 600 /var/vm/swapfile1",
-                "/usr/sbin/mkswap /var/vm/swapfile1",
-              ],
-              RemainAfterExit: "true",
+              Path: {
+                PathExists: "/etc/kubernetes/kubelet.conf",
+              },
+              Install: {
+                WantedBy: "multi-user.target",
+              },
             },
           },
         },
-      },
-      unit("var-vm-swapfile1.swap") {
-        content_:: {
-          sections: {
-            Unit: {
-              Description: "Turn on swap",
-              Requires: "create-swapfile.service",
-              After: "create-swapfile.service",
-            },
-            Swap: {
-              What: "/var/vm/swapfile1",
-            },
-            Install: {
-              WantedBy: "swap.target",
+        unit("kubelet.service") {
+          content_:: {
+            sections: {
+              Unit: {
+                Description: "Kubelet via Hyperkube ACI",
+                After: "network.target docker.socket",
+                Wants: "docker.socket",
+              },
+              Service: {
+                EnvironmentFile: "/etc/kubernetes/kubelet.env",
+                Environment: 'RKT_RUN_ARGS="%s"' % std.join(" ", [
+                  "--uuid-file-save=/var/cache/kubelet-pod.uuid",
+                ] + [
+                  local name(path) = utils.stripLeading(
+                    "-", std.join("", [if utils.isalpha(c) then c else "-"
+                      for c in std.stringChars(path)]));
+                  "--volume=%(n)s,kind=host,source=%(p)s --mount volume=%(n)s,target=%(p)s" % {n: name(p), p: p}
+                  for p in ["/etc/resolv.conf", "/var/lib/cni", "/etc/cni/net.d", "/opt/cni/bin", "/var/log", "/var/lib/local-data", "/var/lib/calico"]
+                ]),
+                ExecStartPre: [
+                  "-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid",
+                  "/bin/mkdir -p " + std.join(" ", [
+                    "/opt/cni/bin",
+                    "/etc/kubernetes/manifests",
+                    "/etc/cni/net.d",
+                    "/etc/kubernetes/checkpoint-secrets",
+                    "/etc/kubernetes/inactive-manifests",
+                    "/var/lib/cni",
+                    "/var/lib/kubelet/volumeplugins",
+                    "/var/lib/local-data",
+                    "/var/lib/calico",
+                  ]),
+                ],
+                // ExecStartPre=/usr/bin/bash -c "grep 'certificate-authority-data' /etc/kubernetes/kubeconfig | awk '{print $2}' | base64 -d > /etc/kubernetes/ca.crt"
+                ExecStart: std.join(" ", ["/usr/lib/coreos/kubelet-wrapper"] + [
+                  "--%s=%s" % kv for kv in kube.objectItems(self.args_)]),
+                // https://github.com/kubernetes/release/blob/master/rpm/10-kubeadm.conf
+                args_:: {
+                  "anonymous-auth": false,
+                  "client-ca-file": "/etc/kubernetes/pki/ca.crt",
+                  "authentication-token-webhook": true,
+                  "authorization-mode": "Webhook",
+                  "cluster-dns": "10.96.0.10",
+                  "cluster-domain": "cluster.local",
+                  "cert-dir": "/var/lib/kubelet/pki",
+                  "exit-on-lock-contention": true,
+                  "pod-max-pids": "10000",
+                  "fail-swap-on": false,
+                  "cgroup-driver": "systemd",
+                  "hostname-override": "%m",
+                  "lock-file": "/var/run/lock/kubelet.lock",
+                  "network-plugin": "cni",
+                  "cni-conf-dir": "/etc/cni/net.d",
+                  "cni-bin-dir": "/opt/cni/bin",
+                  "pod-manifest-path": "/etc/kubernetes/manifests",
+                  "rotate-certificates": true,
+                  "rotate-server-certificates": true,
+                  feature_gates_:: {},
+                  "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
+                  "tls-min-version": "VersionTLS12",
+                  "tls-cipher-suites": "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_128_GCM_SHA256",
+                  "serialize-image-pulls": false,
+                  "kubeconfig": "/etc/kubernetes/kubelet.conf",
+                  "bootstrap-kubeconfig": "/etc/kubernetes/bootstrap-kubelet.conf",
+                  "volume-plugin-dir": "/var/lib/kubelet/volumeplugins",
+                  // TODO: compare these to defaults:
+                    "runtime-request-timeout": "10m",
+                  "sync-frequency": "5m",
+                  eviction_:: {
+                    "nodefs.available": {
+                      hard: "1Gi",
+                      soft: "2Gi",
+                      minimum_reclaim: "500Mi",
+                      soft_grace_period: "2m",
+                    },
+                    "imagefs.available": {
+                      hard: "2Gi",
+                      soft: "3Gi",
+                      minimum_reclaim: "1Gi",
+                      soft_grace_period: "2m",
+                    },
+                  },
+                  local manifestEviction(key, template) = std.join(",", [
+                    template % [kv[0], kv[1][key]] for kv in kube.objectItems(self.eviction_)
+                    if std.objectHas(kv[1], key)
+                  ]),
+                  "eviction-hard": manifestEviction("hard", "%s<%s"),
+                  "eviction-minimum-reclaim": manifestEviction("minimum_reclaim", "%s=%s"),
+                  "eviction-soft": manifestEviction("soft", "%s<%s"),
+                  "eviction-soft-grace-period": manifestEviction("soft_grace_period", "%s=%s"),
+                  "eviction-max-pod-grace-period": "600",
+                },
+                ExecStop: "-/usr/bin/rkt stop --uuid-file=/var/cache/kubelet-pod.uuid",
+                ExecStopPost: "-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid",
+                Restart: "always",
+                RestartSec: "5",
+              },
+              Install: {
+                WantedBy: "multi-user.target",
+              },
             },
           },
         },
-      },
-    ],
+        unit("create-swapfile.service") {
+          content_:: {
+            sections: {
+              Unit: {
+                Description: "Create a swapfile",
+                RequiresMountsFor: "/var",
+                ConditionPathExists: "!/var/vm/swapfile1",
+                // Avoid (circular) dependency on basic.target
+                DefaultDependencies: "no",
+              },
+              Service: {
+                Type: "oneshot",
+                ExecStart: [
+                  "/usr/bin/mkdir -p /var/vm",
+                  "/usr/bin/fallocate -l 8GiB /var/vm/swapfile1",
+                  "/usr/bin/chmod 600 /var/vm/swapfile1",
+                  "/usr/sbin/mkswap /var/vm/swapfile1",
+                ],
+                RemainAfterExit: "true",
+              },
+            },
+          },
+        },
+        unit("var-vm-swapfile1.swap") {
+          content_:: {
+            sections: {
+              Unit: {
+                Description: "Turn on swap",
+                Requires: "create-swapfile.service",
+                After: "create-swapfile.service",
+              },
+              Swap: {
+                What: "/var/vm/swapfile1",
+              },
+              Install: {
+                WantedBy: "swap.target",
+              },
+            },
+          },
+        },
+      ],
+    },
     ssh_authorized_keys: sshKeys,
     local file(path, content) = {
       path: path,
@@ -269,7 +271,7 @@ local filekey(path) = (
                 nodeSelectorTerms: [{
                   matchExpressions: [{
                     // Hijack the updater label
-                    key: "flatcar-linux-update.v1.coreos.com/id",
+                    key: "flatcar-linux-update.v1.flatcar-linux.net/id",
                     operator: "In",
                     values: std.set(["flatcar"]),
                   }],
