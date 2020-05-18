@@ -13,8 +13,8 @@ local utils = import "utils.libsonnet";
 // 1. apiserver first
 // 2. rest of control plane
 // 3. kubelets (see coreos-pxe-install.jsonnet:coreos_kubelet_tag)
-local apiserverVersion = "v1.17.3";
-local version = apiserverVersion;
+local apiserverVersion = "v1.18.2";
+local version = "v1.18.2";
 
 local externalHostname = "kube.lan";
 local apiServer = "https://%s:6443" % [externalHostname];
@@ -143,7 +143,7 @@ local bootstrapTolerations = [{
             },
             containers_+: {
               etcd: kube.Container("etcd") {
-                image: "gcr.io/etcd-development/etcd:v3.4.3",
+                image: "gcr.io/etcd-development/etcd:v3.4.7",
                 securityContext+: {
                   allowPrivilegeEscalation: false,
                 },
@@ -440,10 +440,8 @@ local bootstrapTolerations = [{
                   "proxy-mode": "ipvs",
                   "cluster-cidr": clusterCidr,
                   "hostname-override": "$(NODE_NAME)",
-                  "metrics-bind-address": "$(POD_IP)",
-                  "metrics-port": "10249",
-                  "healthz-bind-address": "$(POD_IP)",
-                  "healthz-port": "10256",
+                  "metrics-bind-address": "$(POD_IP):10249",
+                  "healthz-bind-address": "$(POD_IP):10256",
                 },
                 env_+: {
                   NODE_NAME: kube.FieldRef("spec.nodeName"),
@@ -1184,7 +1182,7 @@ local bootstrapTolerations = [{
             },
             containers_+: {
               default: kube.Container("metrics-server") {
-                image: "gcr.io/google_containers/metrics-server-%s:v0.3.4" % [arch],
+                image: "k8s.gcr.io/metrics-server:v0.3.6",
                 command: ["/metrics-server"],
                 args_+: {
                   "logtostderr": "true",
