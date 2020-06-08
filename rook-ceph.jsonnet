@@ -21,7 +21,9 @@ local cephVersion = "v14.2.6-20200115";
         mon clock drift allowed = 0.1
         # K8s image-gc-low-threshold is 80% - not much point warning
         # before that point. (percent)
-        mon data avail warn = 20
+        # Really, this should align with {nodefs,imagefs}.available
+        # soft limit, and allow absolute size, not just ratio.
+        mon data avail warn = 10
       |||,
     },
   },
@@ -372,7 +374,7 @@ local cephVersion = "v14.2.6-20200115";
 
     deploy: kube.DaemonSet("ceph-%s-reboot-check" % beforeAfter) + $.namespace {
       spec+: {
-        template+: {
+        template+: utils.CriticalPodSpec + {
           spec+: {
             serviceAccountName: $.rebootScriptSa.metadata.name,
             affinity: {
