@@ -548,7 +548,7 @@ local path_join(prefix, suffix) = (
                 },
               },
               resizer: kube.Container("addon-resizer") {
-                image: "gcr.io/google_containers/addon-resizer:2.1",
+                image: "k8s.gcr.io/addon-resizer:2.1",
                 command: ["/pod_nanny"],
                 args_+: {
                   container: spec.containers[0].name,

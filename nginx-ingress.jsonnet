@@ -51,7 +51,7 @@ local metallb = (import "all.jsonnet").metallb;
           terminationGracePeriodSeconds: 60,
           containers_+: {
             default: kube.Container("default-http-backend") {
-              image: "gcr.io/google_containers/defaultbackend:1.4",
+              image: "k8s.gcr.io/defaultbackend:1.4",
               livenessProbe: {
                 httpGet: { path: "/healthz", port: 8080, scheme: "HTTP" },
                 initialDelaySeconds: 30,
