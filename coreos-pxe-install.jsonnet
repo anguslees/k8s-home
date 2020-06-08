@@ -263,7 +263,7 @@ local filekey(path) = (
 
   post_install: kube.DaemonSet("post-install-updater") + $.namespace {
     spec+: {
-      template+: {
+      template+: utils.CriticalPodSpec + {
         spec+: {
           affinity+: {
             nodeAffinity: {
@@ -283,6 +283,10 @@ local filekey(path) = (
             config: kube.ConfigMapVolume($.cloud_config),
             dest: kube.HostPathVolume("/var/lib/flatcar-install", "DirectoryOrCreate"),
           },
+          tolerations+: utils.toleratesMaster,
+          priorityClassName: "system-node-critical",
+          hostNetwork: true,
+          terminationGracePeriodSeconds: 0,
           initContainers_+: {
             copy: utils.shcmd("copy") {
               shcmd: 'cp /config/user_data /dest/',
@@ -293,8 +297,27 @@ local filekey(path) = (
             },
           },
           containers_: {
-            pause: kube.Container("pause") {
-              image: "k8s.gcr.io/pause:3.1",
+            status: kube.Container("status") {
+              // Limit the rate of the kubelet rollout to the daemonset rollout
+              image: "busybox",
+              command: ["cat", "/dev/stdin"], // cheap 'sleep forever'
+              stdin: true,
+              readinessProbe: {
+                exec+: {
+                  command: [
+                    // This only blocks on kubelet version.  Ideally
+                    // it should block on every change implied by
+                    // initContainer (perhaps even require a reboot).
+                    "/bin/sh", "-e", "-x", "-c", |||
+                      v="$(wget -O- http://localhost:10255/metrics | sed -n 's/^kubernetes_build_info{.*gitVersion="\([^"]*\)".*/\1/p')"
+                      test "$v" = %s
+                    ||| % std.escapeStringBash(coreos_kubelet_tag),
+                  ],
+                },
+                timeoutSeconds: 30,
+                periodSeconds: 30*60, // 30mins
+                initialDelaySeconds: 2*60,
+              },
             },
           },
         },
@@ -421,7 +444,7 @@ local filekey(path) = (
               // don't really want to burn a NodePort on it.
               local tftpserver = "$(POD_IP)",
 
-              image: "gcr.io/google_containers/kube-dnsmasq-%s:1.4" % arch,
+              image: "k8s.gcr.io/kube-dnsmasq-%s:1.4" % arch,
               args: [
                 "--log-facility=-", // stderr
                 "--log-dhcp",
