@@ -294,7 +294,8 @@ local kubecfg = import "kubecfg.libsonnet";
           },
           containers_+: {
 	    ipfs: kube.Container("ipfs") {
-	      image: "ipfs/go-ipfs:v0.4.22",
+	      image: "ipfs/go-ipfs:v0.5.0",
+              command: ["start_ipfs", "daemon", "--migrate"],
 	      env_+: {
 		//IPFS_LOGGING: "debug",
                 IPFS_PATH: "/data/ipfs",
