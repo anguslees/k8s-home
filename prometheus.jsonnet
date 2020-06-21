@@ -243,20 +243,23 @@ local path_join(prefix, suffix) = (
                   requests: {cpu: "500m", memory: "3Gi"},
                   limits: self.requests {cpu: "1"},
                 },
+                readinessProbe: {
+                  httpGet: {path: "/-/ready", port: this.ports[0].name},
+                  successThreshold: 2,
+                  initialDelaySeconds: 5,
+                  periodSeconds: 30,
+                },
                 livenessProbe: self.readinessProbe {
-                  httpGet: {path: "/", port: this.ports[0].name},
-                  // Crash recovery can take a _long_ time (many
-                  // minutes), depending on the time since last
-                  // successful compaction.
-                  initialDelaySeconds: 1 * 60 * 60,  // I have seen >45mins when NFS is overloaded.
+                  httpGet: {path: "/-/healthy", port: this.ports[0].name},
                   successThreshold: 1,
                   timeoutSeconds: 10,
                   failureThreshold: 5,
                 },
-                readinessProbe: {
-                  httpGet: {path: "/", port: this.ports[0].name},
-                  successThreshold: 2,
-                  initialDelaySeconds: 5,
+                startupProbe: self.livenessProbe {
+                  // Crash recovery can take a _long_ time (many
+                  // minutes), depending on the time since last
+                  // successful compaction.
+                  failureThreshold: 1 * 60 * 60 / self.periodSeconds,  // I have seen >45mins when NFS is overloaded.
                 },
               },
               config_reload: kube.Container("configmap-reload") {

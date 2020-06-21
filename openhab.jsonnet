@@ -102,9 +102,9 @@ local utils = import "utils.libsonnet";
                 for d in *; do
                   mkdir -p /openhab/conf/$d
                   cp -v /config/$d/* /openhab/conf/$d/
-                  # hey emacs: */
                 done
               |||,
+                                   // hey emacs: */
               volumeMounts_+: {
                 ["conf_"+k]: {mountPath: "/config/"+k, readOnly: true}
                 for k in std.objectFields($.config)
@@ -123,6 +123,7 @@ local utils = import "utils.libsonnet";
                   cp -av /openhab/dist/userdata/* /openhab/userdata/
                 fi
               |||,
+                                                // hey emacs: */
               volumeMounts_+: {
                 userdata: {mountPath: "/openhab/userdata"},
               },
@@ -167,15 +168,17 @@ local utils = import "utils.libsonnet";
                 periodSeconds: 30,
               },
               livenessProbe: self.readinessProbe {
+                timeoutSeconds: 30,
+                failureThreshold: 5,
+                periodSeconds: 60,
+              },
+              startupProbe: self.livenessProbe {
                 // After a version update, openhab needs to download
                 // all the updated modules before it will start acking
                 // health checks.  Last time I tried, this took ~2h (!)
                 // TODO: Rewrite all of the openhab setup to move
                 // that into an init container.
-                initialDelaySeconds: 4 * 60 * 60,  // 4h
-                timeoutSeconds: 30,
-                failureThreshold: 10,
-                periodSeconds: 60,
+                failureThreshold: 4 * 60 * 60 / self.periodSeconds,  // 4h
               },
             },
           },

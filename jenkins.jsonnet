@@ -413,10 +413,14 @@ local version = "2.176.2-alpine";
                 periodSeconds: 30,
               },
               livenessProbe: self.readinessProbe {
-                initialDelaySeconds: 20*60,  // Java :(
                 timeoutSeconds: 30,
-                failureThreshold: 10,
-                periodSeconds: 60,
+                failureThreshold: 5,
+                periodSeconds: 30,
+              },
+              startupProbe: self.livenessProbe {
+                // Java :(
+                initialDelaySeconds: 2*60,
+                failureThreshold: 30 * 60 / self.periodSeconds,
               },
               resources: {
                 limits: {cpu: "1", memory: "1.5Gi"},

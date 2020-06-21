@@ -324,10 +324,12 @@ local kubecfg = import "kubecfg.libsonnet";
                 tcpSocket: {port: 4001},
               },
               livenessProbe: self.readinessProbe {
-                initialDelaySeconds: 1 * 60 * 60, // migration can take crazy-long
                 timeoutSeconds: 30,
                 failureThreshold: 5,
-                periodSeconds: 60,
+                periodSeconds: 30,
+              },
+              startupProbe: self.livenessProbe {
+                failureThreshold: 60 * 60 / self.periodSeconds, // migration can take crazy-long
               },
             },
           },
