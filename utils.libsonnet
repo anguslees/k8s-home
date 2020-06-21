@@ -192,4 +192,25 @@ local kube = import "kube.libsonnet";
       },
     },
   },
+
+  // TODO: use std.member in jsonnet >=0.15.0
+  local member(arr, x) = (
+    std.foldl(function (acc, item) (acc || item == x), arr, false)
+  ),
+
+  manifestToml(obj, tableprefix=""):: std.join("\n", [
+    "%s = %s" % [
+      kv[0],
+      if std.isString(kv[1])
+      then std.escapeStringJson(kv[1])
+      else std.toString(kv[1]),
+    ]
+    for kv in kube.objectItems(obj)
+    if !std.isObject(kv[1])
+  ] + [
+    local table = tableprefix + (if member(std.stringChars(kv[0]), ".") then '"%s"' % kv[0] else kv[0]);
+    ("[%s]\n" % table) + $.manifestToml(kv[1], table + ".")
+    for kv in kube.objectItems(obj)
+    if std.isObject(kv[1])
+  ]),
 }

@@ -927,6 +927,7 @@ local bootstrapTolerations = [{
                   "lock-file": "/var/run/lock/pod-checkpointer.lock",
                   kubeconfig: "/etc/checkpointer/kubeconfig.conf",
                   "checkpoint-grace-period": "5m",
+                  "container-runtime-endpoint": "unix:///run/containerd/containerd.sock",
                 },
                 env_+: {
                   NODE_NAME: kube.FieldRef("spec.nodeName"),
@@ -1026,7 +1027,7 @@ local bootstrapTolerations = [{
         template+: utils.PromScrape(9153) {
           metadata+: {
             annotations+: {
-              "seccomp.security.alpha.kubernetes.io/pod": "docker/default",
+              //"seccomp.security.alpha.kubernetes.io/pod": "docker/default",
             },
           },
           spec+: {

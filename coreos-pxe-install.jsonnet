@@ -49,8 +49,12 @@ local filekey(path) = (
         [if hascontent then "content"]: std.manifestIni(self.content_),
       },
       units: [
+        unit("containerd.service", false) {
+          enable: false,  // use kube-containerd
+        },
         unit("docker.service", false) {
-          enable: false,  // started on-demand via docker.socket
+          enable: false,  // use kube-containerd
+          mask: true,
         },
         unit("update-engine.service", false) {
           enable: true,
@@ -61,6 +65,7 @@ local filekey(path) = (
         },
         unit("kubelet.path") {
           enable: true,
+          command: "start",
           content_:: {
             sections: {
               Unit: {
@@ -75,13 +80,59 @@ local filekey(path) = (
             },
           },
         },
+        /* FIXME: Work out if socket activation is meant to be supported
+        unit("kube-containerd.socket") {
+          enable: true,
+          content_:: {
+            sections: {
+              Unit: {
+                Description: "Containerd Socket",
+                PartOf: "kube-containerd.service",
+              },
+              Socket: {
+                ListenStream: "/run/containerd/containerd.sock",
+                SocketMode: "0660",
+                SocketUser: "root",
+                SocketGroup: "root",
+              },
+            },
+          },
+        },
+         */
+        unit("kube-containerd.service") {
+          enable: true,
+          content_:: {
+            sections: {
+              Unit: {
+                Description: "Containerd container runtime",
+                Documentation: "https://containerd.io",
+                After: "network.target local-fs.target",
+              },
+              Service: {
+                Environment: "CONTAINERD_CONFIG=/etc/containerd/config.toml",
+                ExecStart: "/usr/bin/containerd -a /run/containerd/containerd.sock --config ${CONTAINERD_CONFIG}",
+                //Type: "notify",
+                Delegate: "yes",
+                KillMode: "process",
+                Restart: "always",
+
+                LimitNOFILE: 1048576,
+                LimitNPROC: "infinity",
+                LimitCORE: "infinity",
+                TasksMax: "infinity",
+              },
+            },
+          },
+        },
         unit("kubelet.service") {
+          enable: true,
+          command: "start",
           content_:: {
             sections: {
               Unit: {
                 Description: "Kubelet via Hyperkube ACI",
-                After: "network.target docker.socket",
-                Wants: "docker.socket",
+                After: "network.target kube-containerd.service",
+                Wants: "kube-containerd.service",
               },
               Service: {
                 EnvironmentFile: "/etc/kubernetes/kubelet.env",
@@ -92,7 +143,7 @@ local filekey(path) = (
                     "-", std.join("", [if utils.isalpha(c) then c else "-"
                       for c in std.stringChars(path)]));
                   "--volume=%(n)s,kind=host,source=%(p)s --mount volume=%(n)s,target=%(p)s" % {n: name(p), p: p}
-                  for p in ["/etc/resolv.conf", "/var/lib/cni", "/etc/cni/net.d", "/opt/cni/bin", "/var/log", "/var/lib/local-data", "/var/lib/calico"]
+                  for p in ["/etc/resolv.conf", "/var/lib/cni", "/etc/cni/net.d", "/opt/cni/bin", "/var/log", "/var/lib/local-data", "/var/lib/calico", "/var/lib/containerd"]
                 ]),
                 ExecStartPre: [
                   "-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid",
@@ -124,6 +175,8 @@ local filekey(path) = (
                   "pod-max-pids": "10000",
                   "fail-swap-on": false,
                   "cgroup-driver": "systemd",
+                  "container-runtime": "remote",
+                  "container-runtime-endpoint": "unix:///run/containerd/containerd.sock",
                   "hostname-override": "%m",
                   "lock-file": "/var/run/lock/kubelet.lock",
                   "network-plugin": "cni",
@@ -141,7 +194,7 @@ local filekey(path) = (
                   "bootstrap-kubeconfig": "/etc/kubernetes/bootstrap-kubelet.conf",
                   "volume-plugin-dir": "/var/lib/kubelet/volumeplugins",
                   // TODO: compare these to defaults:
-                    "runtime-request-timeout": "10m",
+                  "runtime-request-timeout": "10m",
                   "sync-frequency": "5m",
                   eviction_:: {
                     "nodefs.available": {
@@ -257,6 +310,30 @@ local filekey(path) = (
           "storage-driver": "overlay2",
           "log-driver": "json-file",
           "log-opts": {"max-size": "100m"},
+        })),
+      file("/etc/containerd/config.toml",
+        utils.manifestToml({
+          subreaper: true,
+          oom_score: -999,
+          grpc: {
+            address: "/run/containerd/containerd.sock",
+            uid: 0,
+            gid: 0,
+          },
+          metrics: {
+            address: "127.0.0.1:1338",
+          },
+          plugins: {
+            cri: {
+              systemd_cgroup: true,
+              //ignore_image_defined_volumes: true,
+              registry: {
+                mirrors: {
+                  "docker.io": {endpoint: ["https://registry-1.docker.io"]},
+                },
+              },
+            },
+          },
         })),
     ],
   },

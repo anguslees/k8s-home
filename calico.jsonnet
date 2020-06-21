@@ -23,7 +23,7 @@ local clusterCidr = "10.244.0.0/16";
         plugins: [
           {
             type: "calico",
-            log_level: "info",
+            log_level: "INFO",
             datastore_type: "kubernetes",
             nodename: "__KUBERNETES_NODE_NAME__",
             mtu: mtu,
@@ -33,7 +33,13 @@ local clusterCidr = "10.244.0.0/16";
               ranges: [[{subnet: "usePodCidr"}]],
             },
             policy: {type: "k8s"},
-            kubernetes: {kubeconfig: "__KUBECONFIG_FILEPATH__"},
+            kubernetes: {
+              kubeconfig: "__KUBECONFIG_FILEPATH__",
+              // dockerd used to work with calico's default 10.96.0.1,
+              // but containerd/cri can't reach that and needs to use kube.lan?
+              // FIXME: understand why.
+              k8s_api_root: "https://kube.lan:6443",
+            },
           },
           {
             type: "portmap",
@@ -343,9 +349,10 @@ local clusterCidr = "10.244.0.0/16";
                   FELIX_IPINIPMTU: mtu,
                   CALICO_DISABLE_FILE_LOGGING: true,
                   FELIX_DEFAULTENDPOINTTOHOSTACTION: "ACCEPT",
-                  FELIX_IPV6SUPPORT: "false",
+                  FELIX_IPV6SUPPORT: false,
                   FELIX_LOGSEVERITYSCREEN: "info",
                   FELIX_HEALTHENABLED: true,
+                  CALICO_MANAGE_CNI: true,
                 },
                 securityContext: {
                   privileged: true,
