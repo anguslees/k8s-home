@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local coreos_kubelet_tag = "v1.18.4";
+local coreos_kubelet_tag = "v1.18.6";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)
@@ -106,7 +106,10 @@ local filekey(path) = (
               Unit: {
                 Description: "Containerd container runtime",
                 Documentation: "https://containerd.io",
-                After: "network.target local-fs.target",
+                // containerd cri plugin gets upset if defaultroute doesn't exist
+                // https://github.com/containerd/cri/pull/794#issuecomment-408830059
+                Wants: "network-online.target",
+                After: "network-online.target local-fs.target",
               },
               Service: {
                 Environment: "CONTAINERD_CONFIG=/etc/containerd/config.toml",
@@ -141,9 +144,9 @@ local filekey(path) = (
                 ] + [
                   local name(path) = utils.stripLeading(
                     "-", std.join("", [if utils.isalpha(c) then c else "-"
-                      for c in std.stringChars(path)]));
+                      for c in std.stringChars(std.asciiLower(path))]));
                   "--volume=%(n)s,kind=host,source=%(p)s --mount volume=%(n)s,target=%(p)s" % {n: name(p), p: p}
-                  for p in ["/etc/resolv.conf", "/var/lib/cni", "/etc/cni/net.d", "/opt/cni/bin", "/var/log", "/var/lib/local-data", "/var/lib/calico", "/var/lib/containerd"]
+                  for p in ["/etc/resolv.conf", "/var/lib/cni", "/etc/cni/net.d", "/opt/cni/bin", "/var/log", "/var/lib/local-data", "/var/lib/calico", "/var/lib/containerd", "/boot/EFI"]
                 ]),
                 ExecStartPre: [
                   "-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid",
@@ -185,7 +188,9 @@ local filekey(path) = (
                   "pod-manifest-path": "/etc/kubernetes/manifests",
                   "rotate-certificates": true,
                   "rotate-server-certificates": true,
-                  feature_gates_:: {},
+                  feature_gates_:: {
+                    IPv6DualStack: true,
+                  },
                   "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
                   "tls-min-version": "VersionTLS12",
                   "tls-cipher-suites": "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_128_GCM_SHA256",
@@ -255,6 +260,7 @@ local filekey(path) = (
           },
         },
         unit("var-vm-swapfile1.swap") {
+          enable: true,
           content_:: {
             sections: {
               Unit: {
@@ -313,6 +319,7 @@ local filekey(path) = (
         })),
       file("/etc/containerd/config.toml",
         utils.manifestToml({
+          version: 2,
           subreaper: true,
           oom_score: -999,
           grpc: {
@@ -324,9 +331,18 @@ local filekey(path) = (
             address: "127.0.0.1:1338",
           },
           plugins: {
-            cri: {
-              systemd_cgroup: true,
-              //ignore_image_defined_volumes: true,
+            "io.containerd.grpc.v1.cri": {
+              containerd: {
+                default_runtime_name: "runc",
+                runtimes: {
+                  runc: {
+                    runtime_type: "io.containerd.runtime.v1.linux",
+                    options: {
+                      SystemdCgroup: true,
+                    },
+                  },
+                },
+              },
               registry: {
                 mirrors: {
                   "docker.io": {endpoint: ["https://registry-1.docker.io"]},
@@ -386,7 +402,7 @@ local filekey(path) = (
                     // it should block on every change implied by
                     // initContainer (perhaps even require a reboot).
                     "/bin/sh", "-e", "-x", "-c", |||
-                      v="$(wget -O- http://localhost:10255/metrics | sed -n 's/^kubernetes_build_info{.*gitVersion="\([^"]*\)".*/\1/p')"
+                      v="$(wget -qO- http://localhost:10255/metrics | sed -n 's/^kubernetes_build_info{.*gitVersion="\([^"]*\)".*/\1/p')"
                       test "$v" = %s
                     ||| % std.escapeStringBash(coreos_kubelet_tag),
                   ],
@@ -402,48 +418,164 @@ local filekey(path) = (
     },
   },
 
-  ipxe_config: utils.HashedConfigMap("ipxe-config") + $.namespace {
+  ipxe_config: kube.ConfigMap("ipxe-config") + $.namespace {
     local http_url = "http://kube.lan:%d" % [$.httpdSvc.spec.ports[0].nodePort],
     data: {
       "boot.ipxe": |||
         #!ipxe
         set http_url %s
+        isset ${ip} || dhcp || echo DHCP failed
 
-        #set base-url http://beta.release.flatcar-linux.net/amd64-usr/current
-        # Local IPFS copy, cached on 2020-04-13:
-        set base-url http://ipfs.k.lan/ipfs/QmVdgm13jqUsVcHQsxjT4fbTEMPaspCQ1jUdKSBZifVPfv
-        prompt -k 0x197e -t 2000 Press F12 to install Flatcar to disk || exit
-        kernel ${base-url}/flatcar_production_pxe.vmlinuz initrd=flatcar_production_pxe_image.cpio.gz flatcar.autologin=tty1 root=LABEL=ROOT flatcar.first_boot=1 ignition.config.url=${http_url}/pxe-config.ign
-        initrd ${base-url}/flatcar_production_pxe_image.cpio.gz
+        #chain --autofree http://boot.ipxe.org/ipxe.lkrn ||
 
-        # Fedora CoreOS (WIP)
-        #set base-url http://ipfs.k.lan/ipfs/QmWMuK5PN4nQWo6eCAnYo3YP2L3PsoKUULGsM5bfuYZp6w
-        #set name fedora-coreos-31.20200113.3.1-live
-        #cpuid --ext 29 && set arch x86_64 || set arch x86
-        #prompt -k 0x197e -t 2000 Press F12 to install ${name} to disk || exit
-        #kernel ${base-url}/${name}-kernel-${arch} ip=dhcp rd.neednet=1 initrd=${name}-initramfs.${arch}.img console=tty0 console=ttyS0 coreos.inst.install_dev=/dev/sda coreos.inst.stream=stable coreos.inst.ignition_url=${http_url}/coreos-kube.ign BOOTIF=01-${net0/mac}
-        #initrd ${base-url}/${name}-initramfs.${arch}.img
+        :main_menu
+        imgfree
+        menu iPXE Boot Menu
+        item local Boot local hdd
+        item worker_install Install k8s worker
+        item flatcar Boot flatcar
+        item coreos Boot Fedora CoreOS
+        item coreos_install Install Fedora CoreOS
+        item debian Boot Debian installer (stable)
+        item windows Boot Windows PE
+        item --gap Other
+        item netbootxyz Chain to netboot.xyz
+        item shell iPXE shell
+        choose menu && goto ${menu}
+        goto local
 
+        :error
+        echo Error occured, press any key to return to menu ...
+        prompt
+        goto main_menu
+
+        :local
+        echo Booting from local disks ...
+        exit 0
+
+        :netbootxyz
+        imgtrust --allow ||
+        chain http://boot.netboot.xyz/
+        exit
+
+        :shell
+        echo Type "exit" to return to menu.
+        imgtrust --allow ||
+        shell
+        imgtrust ||
+        goto main_menu
+
+        :debian
+        set debmirror http://cdn.debian.net/debian/
+        set release stable
+        cpuid --ext 29 && set arch amd64 || set arch i386
+        set base-url ${debmirror}/dists/${release}/main/installer-${arch}/current/images/netboot/debian-installer/${arch}
+        set 209:string pxelinux.cfg/default
+        set 210:string ${base-url}
+        chain --autofree ${base-url}/pxelinux.0
         boot
-	||| % [http_url],
+        goto error
 
-      // Just because I can ...
-      "winpe.ipxe": |||
-        #!ipxe
+        :flatcar
+        cpuid --ext 29 && set arch amd64 || set arch i386
+        set base-url http://beta.release.flatcar-linux.net/${arch}-usr/current
+
+        kernel ${base-url}/flatcar_production_pxe.vmlinuz initrd=flatcar_production_pxe_image.cpio.gz flatcar.autologin
+        initrd ${base-url}/flatcar_production_pxe_image.cpio.gz
+        prompt Press enter when ready to boot
+        boot
+        goto error
+
+        :worker_install
+        cpuid --ext 29 && set arch amd64 || set arch i386
+        set base-url http://beta.release.flatcar-linux.net/${arch}-usr/current
+        # Local IPFS copy, cached on 2020-04-13:
+        #set base-url http://ipfs.k.lan/ipfs/QmVdgm13jqUsVcHQsxjT4fbTEMPaspCQ1jUdKSBZifVPfv
+        prompt -k 0x197e -t 10000 Press F12 to install to disk || goto error
+        kernel ${base-url}/flatcar_production_pxe.vmlinuz initrd=flatcar_production_pxe_image.cpio.gz flatcar.autologin=tty1 flatcar.first_boot=1 ignition.config.url=${http_url}/pxe-config.ign
+        # root=LABEL=ROOT ds=nocloud-net;s=${http_url}/
+        initrd ${base-url}/flatcar_production_pxe_image.cpio.gz
+        boot
+        goto error
+
+        :coreos
+        # Fedora CoreOS
+        set version 32.20200726.3.1
+        set name fedora-coreos-${version}-live
+        set stream stable
+        cpuid --ext 29 && set arch x86_64 || set arch x86
+        set base-url http://builds.coreos.fedoraproject.org/prod/streams/${stream}/builds/${version}/${arch}
+        kernel ${base-url}/${name}-kernel-${arch} ip=dhcp rd.neednet=1 initrd=${name}-initramfs.${arch}.img,${name}-rootfs.${arch}.img console=tty0 console=ttyS0 ignition.platform.id=metal ignition.config.url=${http_url}/pxe-config.ign BOOTIF=01-${net0/mac}
+        initrd ${base-url}/${name}-initramfs.${arch}.img
+        initrd ${base-url}/${name}-rootfs.${arch}.img
+        boot
+        goto error
+
+        :coreos_install
+        # Fedora CoreOS
+        #set base-url http://ipfs.k.lan/ipfs/QmWMuK5PN4nQWo6eCAnYo3YP2L3PsoKUULGsM5bfuYZp6w
+        set version 32.20200726.3.1
+        set name fedora-coreos-${version}-live
+        set stream stable
+        cpuid --ext 29 && set arch x86_64 || set arch x86
+        set base-url http://builds.coreos.fedoraproject.org/prod/streams/${stream}/builds/${version}/${arch}
+        prompt -k 0x197e -t 10000 Press F12 to install ${name} to disk || goto error
+        kernel ${base-url}/${name}-kernel-${arch} ip=dhcp rd.neednet=1 initrd=${name}-initramfs.${arch}.img,${name}-rootfs.${arch}.img console=tty0 console=ttyS0 coreos.inst.install_dev=/dev/sda coreos.inst.stream=stable coreos.inst.ignition_url=${http_url}/pxe-config.ign BOOTIF=01-${net0/mac}
+        initrd ${base-url}/${name}-initramfs.${arch}.img
+        initrd ${base-url}/${name}-rootfs.${arch}.img
+        boot
+        goto error
+
+        :windows
+        set arch x64
         # See http://ipxe.org/howto/winpe
         # Local IPFS copy
         set base-url http://ipfs.k.lan/ipfs/QmTPQ6aeZtk2EwHumbGJFqBeKiNUJidzs586uMj7kuBynn
-        cpuid --ext 29 && set arch amd64 || set arch x86
         # http://git.ipxe.org/releases/wimboot/wimboot-latest.zip
         # This is wimboot-2.6.0-signed
+        imgfree
         kernel http://ipfs.k.lan/ipfs/QmZemVSA6ub1pN2jUfcNFMLbDfpKFjcWqTustK6sXcQ2eq/wimboot
-        initrd ${base-url}/${arch}/bcd BCD
-        initrd ${base-url}/${arch}/boot.sdi boot.sdi
-        initrd ${base-url}/${arch}/boot.wim boot.wim
+        initrd -n bcd ${base-url}/${arch}/bcd BCD ||
+        initrd -n boot.sdi ${base-url}/${arch}/boot.sdi boot.sdi ||
+        initrd -n boot.wim ${base-url}/${arch}/boot.wim boot.wim ||
+        #imgstat
+        #prompt
         boot
-      |||,
+        goto error
+      ||| % [http_url],
 
       "cloud-init.yml": $.cloud_config.data.user_data,
+      "user-data": self["cloud-init.yml"],
+
+      // coreos/flatcar wants to install using ignition.
+      // see https://coreos.com/ignition/docs/latest/configuration-v2_1.html
+      ignition_config:: {
+        ignition: {version: "2.1.0"},
+        storage: {
+          local file(path, contents) = {
+            local this = self,
+            filesystem: "root",
+            path: path,
+            contents_:: contents,
+            contents: {
+              source: "data:;base64," + std.base64(this.contents_),
+            },
+            mode: kube.parseOctal("0644"),
+          },
+          files: [{
+            filesystem: "root",
+            path: "/var/lib/flatcar-install/user_data",
+            contents: {
+              source: "http://kube.lan:%d/user-data" % [$.httpdSvc.spec.ports[0].nodePort],
+              verification: {
+                // Alas, jsonnet doesn't have a sha512 yet.
+                //hash: "sha512-%s" % std.sha512($.cloud_config.data.user_data),
+              },
+            },
+          }],
+        },
+      },
+      "pxe-config.ign": kubecfg.manifestJson(self.ignition_config),
     },
   },
 
@@ -453,7 +585,8 @@ local filekey(path) = (
       wget http://boot.ipxe.org/undionly.kpxe
       ln -sf undionly.kpxe undionly.0
       wget http://boot.ipxe.org/ipxe.efi
-      ln -sf ipxe.efi ipxe.0
+      wget http://boot.ipxe.org/ipxe.pxe
+      ln -sf ipxe.pxe ipxe.0
     |||,
     volumeMounts_+: {
       tftpboot: { mountPath: "/data" },
@@ -533,28 +666,31 @@ local filekey(path) = (
 
                 "--dhcp-userclass=set:ipxe,iPXE",
 
-              ] + ["--dhcp-vendorclass=%s,PXEClient:Arch:%05d" % c for c in [
+              ] + ["--dhcp-vendorclass=set:%s,PXEClient:Arch:%05d" % c for c in [
                 ["BIOS", 0],
                 ["UEFI32", 6],
-                ["UEFI", 7],
-                ["UEFI64", 9],
+                ["UEFI", 7],   // aka BC_EFI
+                ["UEFI64", 9], // aka X86-64_EFI
               ]] + [
+                "--dhcp-vendorclass=set:UEFI64-HTTP,HTTPClient:Arch:00016",
 
                 "--dhcp-range=$(POD_IP),proxy",  // Offer proxy DHCP to everyone on local subnet
 
-                "--pxe-prompt=Esc to avoid iPXE boot ...,5",
+                //"--pxe-prompt=Esc to avoid iPXE boot ...,5",
 
                 // NB: tag handling is last-match-wins
                 "--dhcp-boot=tag:!ipxe,undionly.kpxe,,%s" % tftpserver,
 
-                "--pxe-service=tag:!ipxe,X86PC,Boot to undionly,undionly,%s" % tftpserver,
-              ] + std.flattenArrays([[
-                "--pxe-service=tag:!ipxe,%s,Boot to iPXE,ipxe,%s" % [csa, tftpserver],
-                "--pxe-service=tag:ipxe,%s,Run boot.ipxe,%s/boot.ipxe" % [csa, http_url],
-                "--pxe-service=tag:ipxe,%s,Boot WinPE,%s/winpe.ipxe" % [csa, http_url],
-                "--pxe-service=tag:ipxe,%s,Continue local boot,0" % csa,
-              ] for csa in ["x86PC", "X86-64_EFI", "BC_EFI"]]),
+                // Shiny UEFI boot by HTTP
+                "--dhcp-boot=tag:UEFI64-HTTP,%s/ipxe.efi" % http_url,
+                "--dhcp-option-force=tag:UEFI64-HTTP,60,HTTPClient",
 
+                "--pxe-service=tag:!ipxe,x86PC,Boot to undionly,undionly,%s" % tftpserver,
+                "--pxe-service=tag:!ipxe,x86PC,Boot to full iPXE,ipxe,%s" % tftpserver,
+                "--pxe-service=tag:!ipxe,X86-64_EFI,Boot to iPXE (X86-64),ipxe.efi,%s" % tftpserver,
+                "--pxe-service=tag:!ipxe,BC_EFI,Boot to iPXE (BC),ipxe.efi,%s" % tftpserver,
+                "--dhcp-boot=tag:ipxe,%s/boot.ipxe" % http_url,
+              ],
               env_: {
                 POD_IP: kube.FieldRef("status.podIP"),
                 // HOST_IP is same as POD_IP because hostNetwork=true.

@@ -212,5 +212,7 @@ local kube = import "kube.libsonnet";
     ("[%s]\n" % table) + $.manifestToml(kv[1], table + ".")
     for kv in kube.objectItems(obj)
     if std.isObject(kv[1])
+  ] + [
+    // empty -> force trailing newline
   ]),
 }

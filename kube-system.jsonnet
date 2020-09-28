@@ -13,13 +13,13 @@ local utils = import "utils.libsonnet";
 // 1. apiserver first
 // 2. rest of control plane
 // 3. kubelets (see coreos-pxe-install.jsonnet:coreos_kubelet_tag)
-local apiserverVersion = "v1.18.4";
-local version = "v1.18.4";
+local version = "v1.18.6";
+local apiserverVersion = version;
 
 local externalHostname = "kube.lan";
 local apiServer = "https://%s:6443" % [externalHostname];
-local clusterCidr = "10.244.0.0/16";
-local serviceClusterCidr = "10.96.0.0/12";
+local clusterCidr = "10.244.0.0/16,2406:3400:249:1703::/64";
+local serviceClusterCidr = "10.96.0.0/12,fdd6:fe3c:9ebc:33e2::/112";
 local dnsIP = "10.96.0.10";
 local dnsDomain = "cluster.local";
 
@@ -143,7 +143,7 @@ local bootstrapTolerations = [{
             },
             containers_+: {
               etcd: kube.Container("etcd") {
-                image: "gcr.io/etcd-development/etcd:v3.4.7",
+                image: "gcr.io/etcd-development/etcd:v3.4.9",
                 securityContext+: {
                   allowPrivilegeEscalation: false,
                 },
@@ -438,10 +438,14 @@ local bootstrapTolerations = [{
                 args_+: {
                   "kubeconfig": "/etc/kubernetes/kubeconfig.conf",
                   "proxy-mode": "ipvs",
-                  "cluster-cidr": clusterCidr,
+                  "cluster-cidr": std.split(clusterCidr, ",")[0], // FIXME: #91357
                   "hostname-override": "$(NODE_NAME)",
                   "metrics-bind-address": "$(POD_IP):10249",
                   "healthz-bind-address": "$(POD_IP):10256",
+                  feature_gates_:: {
+                    IPv6DualStack: false,  // FIXME: change when #91357 is released
+                  },
+                  "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
                 },
                 env_+: {
                   NODE_NAME: kube.FieldRef("spec.nodeName"),
@@ -527,6 +531,10 @@ local bootstrapTolerations = [{
                 image: "k8s.gcr.io/kube-apiserver:%s" % [apiserverVersion],
                 command: ["kube-apiserver"],
                 args_+: {
+                  feature_gates_:: {
+                    IPv6DualStack: true,
+                  },
+                  "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
                   "endpoint-reconciler-type": "lease",
                   "enable-bootstrap-token-auth": "true",
                   "kubelet-preferred-address-types": "InternalIP,ExternalIP,Hostname",
@@ -728,14 +736,22 @@ local bootstrapTolerations = [{
                 image: "k8s.gcr.io/kube-controller-manager:%s" % [version],
                 command: ["kube-controller-manager"],
                 args_+: {
+                  "profiling": "false",
                   "use-service-account-credentials": "true",
                   "leader-elect": "true",
-                  "leader-elect-resource-lock": "configmaps",
+                  "leader-elect-resource-lock": "leases",
+
+                  feature_gates_:: {
+                    IPv6DualStack: true,
+                  },
+                  "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
+
                   "controllers": "*,bootstrapsigner,tokencleaner",
                   "allocate-node-cidrs": "true",
+                  "node-cidr-mask-size-ipv4": 24,
+                  "node-cidr-mask-size-ipv6": 80,
                   "cluster-cidr": clusterCidr,
                   "service-cluster-ip-range": serviceClusterCidr,
-                  "node-cidr-mask-size": "24",
                   "terminated-pod-gc-threshold": "100", // default is massive 12500
                   //"cloud-provider"
 
@@ -829,8 +845,10 @@ local bootstrapTolerations = [{
                 image: "k8s.gcr.io/kube-scheduler:%s" % [version],
                 command: ["kube-scheduler"],
                 args_+: {
+                  "profiling": "false",
+
                   "leader-elect": "true",
-                  "leader-elect-resource-lock": "configmaps",
+                  "leader-elect-resource-lock": "leases",
 
                   // Reduce leader-elect load
                   "leader-elect-lease-duration": "300s", // default 15s

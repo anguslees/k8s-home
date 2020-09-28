@@ -4,13 +4,16 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local version = "v3.13.1";
+local version = "v3.15.1";
 
 local mtu = 1440;
 local calico_backend = "bird";
 
 // Needs to fall within kube-proxy/k-c-m --cluster-cidr
 local clusterCidr = "10.244.0.0/16";
+//local clusterCidr6 = "fd20::/112";
+// My local IPv6 subnet - you'll want to change this:
+local clusterCidr6 = "2406:3400:249:1703::/112";
 
 {
   namespace:: {metadata+: {namespace: "kube-system"}},
@@ -23,21 +26,26 @@ local clusterCidr = "10.244.0.0/16";
         plugins: [
           {
             type: "calico",
-            log_level: "INFO",
+            log_level: "info",
             datastore_type: "kubernetes",
             nodename: "__KUBERNETES_NODE_NAME__",
             mtu: mtu,
             ipam: {
-              //type: "calico-ipam"
-              type: "host-local",
-              ranges: [[{subnet: "usePodCidr"}]],
+              type: "calico-ipam"
+              //type: "host-local",
+              //ranges: [[{subnet: "usePodCidr"}]],
+              // Clear out ipam state on reboot.  Pods are restarted
+              // anyway on k8s after reboot, and this helps clean up
+              // leaks.
+              //dataDir: "/var/run/cni/networks",
             },
             policy: {type: "k8s"},
             kubernetes: {
               kubeconfig: "__KUBECONFIG_FILEPATH__",
               // dockerd used to work with calico's default 10.96.0.1,
               // but containerd/cri can't reach that and needs to use kube.lan?
-              // FIXME: understand why.
+              // FIXME: understand why.  This might be
+              // https://github.com/projectcalico/calico/issues/3689
               k8s_api_root: "https://kube.lan:6443",
             },
           },
@@ -94,10 +102,10 @@ local clusterCidr = "10.244.0.0/16";
   },
   GlobalNetworkSet:: self.globalnetsetCRD.new,
 
-  hostendpointsCRD: kube.CustomResourceDefinition("crd.projectcalico.org", "v1", "HostEndpoints") {
+  hostendpointsCRD: kube.CustomResourceDefinition("crd.projectcalico.org", "v1", "HostEndpoint") {
     spec+: {scope: "Cluster"},
   },
-  HostEndpoints:: self.hostendpointsCRD.new,
+  HostEndpoint:: self.hostendpointsCRD.new,
 
   ipamblocksCRD: kube.CustomResourceDefinition("crd.projectcalico.org", "v1", "IPAMBlock") {
     spec+: {scope: "Cluster"},
@@ -118,6 +126,11 @@ local clusterCidr = "10.244.0.0/16";
     spec+: {scope: "Cluster"},
   },
   IPPool:: self.ippoolsCRD.new,
+
+  kubecontrollersCRD: kube.CustomResourceDefinition("crd.projectcalico.org", "v1", "KubeControllersConfiguration") {
+    spec+: {scope: "Cluster"},
+  },
+  KubeControllersConfiguration:: self.kubecontrollersCRD.new,
 
   netpoliciesCRD: kube.CustomResourceDefinition("crd.projectcalico.org", "v1", "NetworkPolicy") {
     spec+: {names+: {plural: "networkpolicies"}},
@@ -142,13 +155,28 @@ local clusterCidr = "10.244.0.0/16";
         },
         {
           apiGroups: ["crd.projectcalico.org"],
+          resources: ["ippools"],
+          verbs: ["list"],
+        },
+        {
+          apiGroups: ["crd.projectcalico.org"],
           resources: ["blockaffinities", "ipamblocks", "ipamhandles"],
+          verbs: ["get", "list", "create", "update", "delete"],
+        },
+        {
+          apiGroups: ["crd.projectcalico.org"],
+          resources: ["hostendpoints"],
           verbs: ["get", "list", "create", "update", "delete"],
         },
         {
           apiGroups: ["crd.projectcalico.org"],
           resources: ["clusterinformations"],
           verbs: ["get", "create", "update"],
+        },
+        {
+          apiGroups: ["crd.projectcalico.org"],
+          resources: ["kubecontrollersconfigurations"],
+          verbs: ["get", "create", "update", "watch"],
         },
       ],
     },
@@ -265,6 +293,11 @@ local clusterCidr = "10.244.0.0/16";
         },
         {
           apiGroups: ["crd.projectcalico.org"],
+          resources: ["ipamconfigs"],
+          verbs: ["get"],
+        },
+        {
+          apiGroups: ["crd.projectcalico.org"],
           resources: ["blockaffinities"],
           verbs: ["watch"],
         },
@@ -340,16 +373,18 @@ local clusterCidr = "10.244.0.0/16";
                   NODENAME: kube.FieldRef("spec.nodeName"),
                   CALICO_NETWORKING_BACKEND: calico_backend,
                   CLUSTER_TYPE: "k8s,bgp",
-                  USE_POD_CIDR: true,
+                  USE_POD_CIDR: false,
                   IP: "autodetect",
                   IP_AUTODETECTION_METHOD: "can-reach=8.8.8.8",
+                  IP6: "autodetect",
                   IP6_AUTODETECTION_METHOD: "can-reach=2001:4860:4860::8888",
                   CALICO_IPV4POOL_CIDR: clusterCidr,
                   CALICO_IPV4POOL_IPIP: "CrossSubnet",
+                  CALICO_IPV6POOL_CIDR: clusterCidr6,
                   FELIX_IPINIPMTU: mtu,
                   CALICO_DISABLE_FILE_LOGGING: true,
                   FELIX_DEFAULTENDPOINTTOHOSTACTION: "ACCEPT",
-                  FELIX_IPV6SUPPORT: false,
+                  FELIX_IPV6SUPPORT: true,
                   FELIX_LOGSEVERITYSCREEN: "info",
                   FELIX_HEALTHENABLED: true,
                   CALICO_MANAGE_CNI: true,
@@ -359,13 +394,13 @@ local clusterCidr = "10.244.0.0/16";
                   capabilities: {add: ["NET_ADMIN"]},
                 },
                 resources: {
-                  requests: {cpu: "200m"},
+                  requests: {memory: "40Mi", cpu: "200m"},
                 },
                 readinessProbe: {
                   exec: {
                     command: ["/bin/calico-node", "-felix-live", "-bird-live"],
                   },
-                  periodSeconds: 10,
+                  periodSeconds: 30,
                 },
                 livenessProbe: self.readinessProbe {
                   initialDelaySeconds: 10,
