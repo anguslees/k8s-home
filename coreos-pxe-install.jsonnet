@@ -250,7 +250,7 @@ local filekey(path) = (
                 Type: "oneshot",
                 ExecStart: [
                   "/usr/bin/mkdir -p /var/vm",
-                  "/usr/bin/fallocate -l 8GiB /var/vm/swapfile1",
+                  "/usr/bin/dd if=/dev/zero of=/var/vm/swapfile1 bs=1M count=8096",
                   "/usr/bin/chmod 600 /var/vm/swapfile1",
                   "/usr/sbin/mkswap /var/vm/swapfile1",
                 ],
