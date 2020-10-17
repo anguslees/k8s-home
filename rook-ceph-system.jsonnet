@@ -391,6 +391,7 @@ local version = "v1.1.9";
         },
       }],
     },
+    rules:: null, // filled by aggregation controller
   },
 
   cephGlobalRules: kube.ClusterRole("rook-ceph-global-rules") {
@@ -512,6 +513,7 @@ local version = "v1.1.9";
         },
       }],
     },
+    rules:: null, // filled by aggregation controller
   },
 
   csiNodepluginRules: kube.ClusterRole("cephfs-csi-nodeplugin-rules") {
@@ -557,6 +559,7 @@ local version = "v1.1.9";
         },
       }],
     },
+    rules:: null, // filled by aggregation controller
   },
 
   provisionerRoleRules: kube.ClusterRole("cephfs-external-provisioner-runner-rules") {
@@ -650,6 +653,7 @@ local version = "v1.1.9";
         },
       }],
     },
+    rules:: null, // filled by aggregation controller
   },
 
   rbdNodepluginRoleRules: kube.ClusterRole("rbd-csi-nodeplugin-rules") {
@@ -700,6 +704,7 @@ local version = "v1.1.9";
         },
       }],
     },
+    rules:: null, // filled by aggregation controller
   },
 
   rbdExtProvisionerRoleRules: kube.ClusterRole("rbd-external-provisioner-runner-rules") {
