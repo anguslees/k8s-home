@@ -72,7 +72,7 @@ local filekey(path) = (
                 Description: "Watch for kubeconfig",
               },
               Path: {
-                PathExists: "/etc/kubernetes/kubelet.conf",
+                PathExists: "/etc/kubernetes/bootstrap-kubelet.conf",
               },
               Install: {
                 WantedBy: "multi-user.target",
