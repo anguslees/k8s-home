@@ -128,11 +128,22 @@ local cephVersion = "v14.2.6-20200115";
       mon: {
         count: 3,
         allowMultiplePerNode: false,
+        resources: {
+          requests: {memory: "750Mi", cpu: "100m"},
+        },
       },
       mgr: {
         modules: [
           {name: "pg_autoscaler", enabled: true},
         ],
+        resources: {
+          requests: {memory: "400Mi", cpu: "100m"},
+        },
+      },
+      osd: {
+        resources: {
+          requests: {memory: "400Mi", cpu: "100m"},
+        },
       },
       dashboard: {
         enabled: true,
