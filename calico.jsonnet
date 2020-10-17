@@ -4,7 +4,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local version = "v3.15.1";
+local version = "v3.15.3";
 
 local mtu = 1440;
 local calico_backend = "bird";
