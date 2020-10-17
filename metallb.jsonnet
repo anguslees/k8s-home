@@ -1,7 +1,7 @@
 local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 
-local version = "v0.6.2";
+local version = "v0.9.3";
 
 {
   namespace:: {metadata+: {namespace: "metallb"}},
@@ -54,32 +54,16 @@ local version = "v0.6.2";
         resources: ["services", "endpoints", "nodes"],
         verbs: ["get", "list", "watch"],
       },
+      {
+        apiGroups: [""],
+        resources: ["events"],
+        verbs: ["create", "patch"],
+      },
     ],
   },
 
   speakerRoleBinding: kube.ClusterRoleBinding("speaker") {
     roleRef_: $.speakerRole,
-    subjects_+: [$.speaker.sa],
-  },
-
-  leaderElection: kube.Role("leader-elect") + $.namespace {
-    rules: [
-      {
-        apiGroups: [""],
-        resources: ["endpoints"],
-        resourceNames: ["metallb-speaker"],
-        verbs: ["get", "update"],
-      },
-      {
-        apiGroups: [""],
-        resources: ["endpoints"],
-        verbs: ["create"],
-      },
-    ],
-  },
-
-  leaderElectionBinding: kube.RoleBinding("leader-elect") + $.namespace {
-    roleRef_: $.leaderElection,
     subjects_+: [$.speaker.sa],
   },
 
@@ -89,11 +73,6 @@ local version = "v0.6.2";
         apiGroups: [""],
         resources: ["configmaps"],
         verbs: ["get", "list", "watch"],
-      },
-      {
-        apiGroups: [""],
-        resources: ["events"],
-        verbs: ["create"],
       },
     ],
   },
