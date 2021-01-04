@@ -3,6 +3,8 @@
 
   calico: import "calico.jsonnet",
 
+  rubber_stamp: import "rubber-stamp.jsonnet",
+
   ssecrets: import "sealed-secrets.jsonnet",
 
   metallb: import "metallb.jsonnet",
