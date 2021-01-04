@@ -8,6 +8,7 @@
 local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
+local certman = import "cert-manager.jsonnet";
 
 // NB: Kubernetes (minor semver) upgrade order is:
 // 1. apiserver first
@@ -26,9 +27,9 @@ local dnsDomain = "cluster.local";
 // NB: these IPs are also burnt into the peer/server certificates,
 // because of the golang TLS verification wars.
 local etcdMembers = {
-  "e5b2509083d942b5909c7b32e0460c54": "192.168.0.102",
-  "fc4698cdc1184810a2c3447a7ee66689": "192.168.0.129",
-  "0b5642a6cc18493d81a606483d9cbb7b": "192.168.0.132",
+  "fc4698cdc1184810a2c3447a7ee66689": "192.168.0.129",  // etcd-0
+  "e5b2509083d942b5909c7b32e0460c54": "192.168.0.102",  // etcd-1
+  "0b5642a6cc18493d81a606483d9cbb7b": "192.168.0.132",  // etcd-2
 };
 
 local isolateMasters = false;
@@ -49,6 +50,66 @@ local bootstrapTolerations = [{
   ["node.kubernetes.io/unreachable", "NoExecute"],
 ]];
 
+local apiGroup(gv) = (
+  local split = std.splitLimit(gv, "/", 1);
+  if std.length(split) == 1 then "" else split[0]
+);
+
+local issuerRef(issuer) = {
+  group: apiGroup(issuer.apiVersion),
+  kind: issuer.kind,
+  name: issuer.metadata.name,
+};
+
+local Certificate(name, issuer) = certman.Certificate(name) {
+  spec+: {
+    issuerRef: issuerRef(issuer),
+    isCA: false,
+    usages_:: ["digital signature", "key encipherment"],
+    usages: std.set(self.usages_),
+    dnsNames_:: [],
+    dnsNames: std.set(self.dnsNames_),
+    ipAddresses_:: [],
+    ipAddresses: std.set(self.ipAddresses_),
+    commonName: name,
+    secretName: name,
+    keyAlgorithm: "ecdsa",
+    duration_h_:: 365 * 24 / 4, // 3 months
+    duration: "%dh" % self.duration_h_,
+    renewBefore_h_:: self.duration_h_ / 3,
+    renewBefore: "%dh" % self.renewBefore_h_,
+    //privateKey+: {rotationPolicy: "Always"},  TODO: set this, after upgrading to newer cert-manager
+  },
+
+  // Fake Secret, used to represent the _real_ cert Secret to jsonnet
+  secret_:: kube.Secret($.spec.secretName) {
+    metadata+: {namespace: $.metadata.namespace},
+    type: "kubernetes.io/tls",
+    data: {[k]: error "attempt to access TLS value directly"
+      for k in ["tls.crt", "tls.key", "ca.crt"]},
+  },
+};
+
+local CA(name, namespace, issuer) = {
+  cert: Certificate(name, issuer) {
+    metadata+: {namespace: namespace},
+    spec+: {
+      isCA: true,
+      usages_+: ["cert sign", "crl sign"],
+      // CA rotation is still clumsy in cert-manager.
+      // https://github.com/jetstack/cert-manager/issues/2478
+      duration_h_: 365 * 24 * 10, // 10y
+    },
+  },
+
+  issuer: certman.Issuer(name) {
+    metadata+: {namespace: namespace},
+    spec+: {
+      ca: {secretName: $.cert.spec.secretName},
+    },
+  },
+};
+
 // Inspiration:
 //  https://github.com/kubernetes/kubeadm/blob/master/docs/design/design_v1.10.md
 //  https://github.com/kubernetes-incubator/bootkube/blob/master/pkg/asset/internal/templates.go
@@ -59,6 +120,29 @@ local bootstrapTolerations = [{
   },
 
   etcd: {
+    ca: CA("kube-etcd-ca", $.namespace.metadata.namespace, $.selfSigner),
+
+    serverCert: Certificate("etcd-server", self.ca.issuer) + $.namespace {
+      spec+: {
+        usages_+: ["server auth"],
+        ipAddresses_: kube.objectValues(etcdMembers) + ["127.0.0.1", "::1"],
+      },
+    },
+
+    peerCert: Certificate("etcd-peer", self.ca.issuer) + $.namespace {
+      spec+: {
+        usages_+: ["server auth", "client auth"],
+        commonName: "etcd.local", // historical.
+        ipAddresses_: kube.objectValues(etcdMembers),
+      },
+    },
+
+    monitorCert: Certificate("etcd-monitor", self.ca.issuer) + $.namespace {
+      spec+: {
+        usages_+: ["client auth"],
+      },
+    },
+
     svc: kube.Service("etcd") + $.namespace {
       target_pod: $.etcd.deploy.spec.template,
       spec+: {
@@ -113,10 +197,10 @@ local bootstrapTolerations = [{
             },
             volumes_: {
               data: kube.HostPathVolume("/var/lib/etcd", "DirectoryOrCreate"),
-              etcd_ca: kube.SecretVolume($.secrets.etcd_ca),
-              etcd_server: kube.SecretVolume($.secrets.etcdServerKey),
-              etcd_peer: kube.SecretVolume($.secrets.etcdPeerKey),
-              etcd_client: kube.SecretVolume($.secrets.etcdMonitorKey),
+              etcd_ca: kube.SecretVolume($.secrets.etcd_ca), // TODO: migration-only
+              etcd_server: kube.SecretVolume($.etcd.serverCert.secret_),
+              etcd_peer: kube.SecretVolume($.etcd.peerCert.secret_),
+              etcd_client: kube.SecretVolume($.etcd.monitorCert.secret_),
             },
             affinity+: {
               nodeAffinity: {
@@ -163,9 +247,9 @@ local bootstrapTolerations = [{
                   "key-file": "/keys/etcd-server/tls.key",
                   "peer-cert-file": "/keys/etcd-peer/tls.crt",
                   "peer-key-file": "/keys/etcd-peer/tls.key",
-                  "peer-client-cert-auth": true,
-                  "peer-cert-allowed-cn": "etcd.local",
                   "peer-trusted-ca-file": "/keys/etcd-ca/ca.crt",
+                  "peer-client-cert-auth": true,
+                  "peer-cert-allowed-cn": $.etcd.peerCert.spec.commonName,
                   "listen-peer-urls": "https://$(POD_IP):2380",
                   "client-cert-auth": true,
                   "trusted-ca-file": "/keys/etcd-ca/ca.crt",
@@ -177,7 +261,7 @@ local bootstrapTolerations = [{
                   ETCD_NAME: kube.FieldRef("spec.nodeName"),
                   POD_IP: kube.FieldRef("status.podIP"),
                   ETCDCTL_API: "3",
-                  ETCDCTL_CACERT: "/keys/etcd-ca/ca.crt",
+                  ETCDCTL_CACERT: "/keys/etcd-server/ca.crt",
                   ETCDCTL_CERT: "/keys/etcd-client/tls.crt",
                   ETCDCTL_KEY: "/keys/etcd-client/tls.key",
                   GOGC: "25",
@@ -195,7 +279,7 @@ local bootstrapTolerations = [{
                       "--endpoints=https://127.0.0.1:2379",
                       // "certificate is valid for 192.168.0.129, not 127.0.0.1"
                       // We don't care, since we trust 127.0.0.1.
-                      "--insecure-skip-tls-verify",
+                      "--insecure-skip-tls-verify",  // FIXME?
                     ] + self.etcdctl_args,
                   },
                   failureThreshold: 8,
@@ -295,6 +379,10 @@ local bootstrapTolerations = [{
     },
   },
 
+  selfSigner: certman.Issuer("selfsign") + $.namespace {
+    spec+: {selfSigned: {}},
+  },
+
   secrets: {
     local tlsType = "kubernetes.io/tls",
 
@@ -309,7 +397,9 @@ local bootstrapTolerations = [{
 
     // Private CA key and matching (single) certificate
     // kubeadm uses /etc/kubernetes/pki/ca.{crt,key}
-    ca: utils.HashedSecret("kube-ca") + $.namespace {
+    ca: CA("kube-ca", $.namespace.metadata.namespace, $.selfSigner),
+    // TODO: remove
+    ca_old: utils.HashedSecret("kube-ca") + $.namespace {
       type: tlsType,
       data_: {
         "tls.crt": importstr "pki/ca-primary.crt",
@@ -317,40 +407,19 @@ local bootstrapTolerations = [{
       },
     },
 
+    kubernetes_admin: Certificate("kubernetes-admin", $.secrets.ca.issuer) + $.namespace {
+      spec+: {
+        usages_+: ["client auth"],
+        organization: ["system:masters"],
+        duration_h_: 365 * 24 / 2, // 6 months - requires manually copying out the key/cert
+      },
+    },
+
     // kubeadm uses /etc/kubernetes/pki/etcd-ca.crt
+    // TODO: remove after migration
     etcd_ca: utils.HashedSecret("kube-etcd-ca") + $.namespace {
       data_: {
         "ca.crt": importstr "pki/etcd-ca.pem",
-      },
-    },
-
-    etcdServerKey: utils.HashedSecret("etcd-server") + $.namespace {
-      data_: {
-        "tls.crt": importstr "pki/etcd-etcd.local-server.pem",
-        "tls.key": importstr "pki/etcd-etcd.local-server-key.pem",
-      },
-    },
-
-    etcdPeerKey: utils.HashedSecret("etcd-peer") + $.namespace {
-      data_: {
-        "tls.crt": importstr "pki/etcd-etcd.local-peer.pem",
-        "tls.key": importstr "pki/etcd-etcd.local-peer-key.pem",
-      },
-    },
-
-    etcdMonitorKey: utils.HashedSecret("etcd-monitor") + $.namespace {
-      data_: {
-        "tls.crt": importstr "pki/etcd-monitor-client.pem",
-        "tls.key": importstr "pki/etcd-monitor-client-key.pem",
-      },
-    },
-
-    // kubeadm uses /etc/kubernetes/pki/etcd-apiserver-client.{crt,key}
-    etcd_apiserver_client: utils.HashedSecret("kube-etcd-apiserver-client") + $.namespace {
-      type: tlsType,
-      data_: {
-        "tls.crt": importstr "pki/etcd-apiserver-client.pem",
-        "tls.key": importstr "pki/etcd-apiserver-client-key.pem",
       },
     },
 
@@ -360,6 +429,7 @@ local bootstrapTolerations = [{
       data_: {
         "tls.crt": importstr "pki/apiserver.crt",
         "tls.key": importstr "pki/apiserver.key",
+        "ca.crt": importstr "pki/ca.crt",
       },
     },
 
@@ -369,10 +439,12 @@ local bootstrapTolerations = [{
       data_: {
         "tls.crt": importstr "pki/apiserver-kubelet-client.crt",
         "tls.key": importstr "pki/apiserver-kubelet-client.key",
+        "ca.crt": importstr "pki/ca.crt",
       },
     },
 
     // kubeadm uses /etc/kubernetes/pki/sa.{pub,key}
+    // TODO: auto-rotate this. (NB: 'public key' (not cert) is currently unsupported by cert-manager)
     service_account: utils.HashedSecret("kube-service-account") + $.namespace {
       data_: {
         "key.pub": importstr "pki/sa.pub",
@@ -383,19 +455,14 @@ local bootstrapTolerations = [{
     // CA bundle (ca.crt)
     // kubeadm uses /etc/kubernetes/pki/front-proxy-ca.{crt,key}
     // TODO: I suspect this should be a CA bundle, not a crt/key pair??
-    front_proxy_ca: utils.HashedSecret("kube-front-proxy-ca") + $.namespace {
-      data_: {
-        "tls.crt": importstr "pki/front-proxy-ca.crt",
-        "tls.key": importstr "pki/front-proxy-ca.key",
-      },
-    },
+    // TODO: unused
+    front_proxy_ca: CA("kube-front-proxy-ca", $.namespace.metadata.namespace, $.selfSigner),
 
     // kubeadm uses /etc/kubernetes/pki/front-proxy-client.{crt,key}
-    front_proxy_client: utils.HashedSecret("kube-front-proxy-client") + $.namespace {
-      type: tlsType,
-      data_: {
-        "tls.crt": importstr "pki/front-proxy-client.crt",
-        "tls.key": importstr "pki/front-proxy-client.key",
+    front_proxy_client: Certificate("kube-front-proxy-client", $.secrets.front_proxy_ca.issuer) + $.namespace {
+      spec+: {
+        usages_+: ["client auth"],
+        commonName: "front-proxy-client",
       },
     },
   },
@@ -477,6 +544,13 @@ local bootstrapTolerations = [{
   },
 
   apiserver: {
+    // kubeadm uses /etc/kubernetes/pki/etcd-apiserver-client.{crt,key}
+    etcdClientCert: Certificate("kube-etcd-apiserver-client", $.etcd.ca.issuer) + $.namespace {
+      spec+: {
+        usages_+: ["client auth"],
+      },
+    },
+
     pdb: kube.PodDisruptionBudget("apiserver") + $.namespace {
       target_pod: $.apiserver.deploy.spec.template,
       spec+: {minAvailable: 1},
@@ -518,11 +592,9 @@ local bootstrapTolerations = [{
                 },
               },
               ca_bundle: kube.SecretVolume($.secrets.ca_bundle),
-              fpc: kube.SecretVolume($.secrets.front_proxy_client),
-              fp_ca: kube.SecretVolume($.secrets.front_proxy_ca),
+              fpc: kube.SecretVolume($.secrets.front_proxy_client.secret_),
               tls: kube.SecretVolume($.secrets.apiserver),
-              etcd_ca: kube.SecretVolume($.secrets.etcd_ca),
-              etcd_client: kube.SecretVolume($.secrets.etcd_apiserver_client),
+              etcd_client: kube.SecretVolume($.apiserver.etcdClientCert.secret_),
 
               cacerts: kube.HostPathVolume("/etc/ssl/certs", "DirectoryOrCreate"),
             },
@@ -573,15 +645,16 @@ local bootstrapTolerations = [{
                   "proxy-client-key-file": "/keys/front-proxy-client/tls.key",
                   "tls-cert-file": "/keys/apiserver/tls.crt",
                   "tls-private-key-file": "/keys/apiserver/tls.key",
-                  "etcd-cafile": "/keys/etcd-ca/ca.crt",
+                  "etcd-cafile": "/keys/etcd-apiserver-client/ca.crt",
                   "etcd-certfile": "/keys/etcd-apiserver-client/tls.crt",
                   "etcd-keyfile": "/keys/etcd-apiserver-client/tls.key",
 
                   "requestheader-extra-headers-prefix": "X-Remote-Extra-",
-                  "requestheader-allowed-names": "front-proxy-client",
+                  requestheader_allowed_names_:: [$.secrets.front_proxy_client.spec.commonName],
+                  "requestheader-allowed-names": std.join(",", std.set(self.requestheader_allowed_names_)),
                   "requestheader-username-headers": "X-Remote-User",
                   "requestheader-group-headers": "X-Remote-Group",
-                  "requestheader-client-ca-file": "/keys/front-proxy-ca/tls.crt",
+                  "requestheader-client-ca-file": "/keys/front-proxy-client/ca.crt",
 
                   // Workaround old coreos update-operator code.
                   // https://github.com/coreos/container-linux-update-operator/issues/196
@@ -616,9 +689,7 @@ local bootstrapTolerations = [{
                   sa: {mountPath: "/keys/sa", readOnly: true},
                   ca_bundle: {mountPath: "/keys/ca-bundle", readOnly: true},
                   fpc: {mountPath: "/keys/front-proxy-client", readOnly: true},
-                  fp_ca: {mountPath: "/keys/front-proxy-ca", readOnly: true},
                   tls: {mountPath: "/keys/apiserver", readOnly: true},
-                  etcd_ca: {mountPath: "/keys/etcd-ca", readOnly: true},
                   etcd_client: {mountPath: "/keys/etcd-apiserver-client", readOnly: true},
                   cacerts: {mountPath: "/etc/ssl/certs", readOnly: true},
                 },
@@ -727,7 +798,7 @@ local bootstrapTolerations = [{
               varrunkubernetes: kube.EmptyDirVolume(),
               cacerts: kube.HostPathVolume("/etc/ssl/certs", "DirectoryOrCreate"),
               flexvolume: kube.HostPathVolume("/var/lib/kubelet/volumeplugins", "DirectoryOrCreate"),
-              ca: kube.SecretVolume($.secrets.ca),
+              ca: kube.SecretVolume($.secrets.ca_old),
               ca_bundle: kube.SecretVolume($.secrets.ca_bundle),
               sa: kube.SecretVolume($.secrets.service_account),
             },
@@ -1007,7 +1078,7 @@ local bootstrapTolerations = [{
             }
             log
             kubernetes %(dnsDomain)s in-addr.arpa ip6.arpa {
-              pods insecure
+              pods insecure # FIXME
               upstream
               fallthrough in-addr.arpa ip6.arpa
             }
@@ -1191,10 +1262,10 @@ local bootstrapTolerations = [{
             serviceAccountName: $.metrics.serviceAccount.metadata.name,
             volumes_+: {
               tmp: kube.EmptyDirVolume(),
-              fp_ca: kube.SecretVolume($.secrets.front_proxy_ca) {
+              fp_ca: kube.SecretVolume($.secrets.front_proxy_client.secret_) {
                 secret+: {
                   items: [
-                    {key: "tls.crt", path: self.key}, // public cert only
+                    {key: "ca.crt", path: self.key}, // public cert only
                   ],
                 },
               },
@@ -1209,9 +1280,10 @@ local bootstrapTolerations = [{
                   "secure-port": "8443",
                   "cert-dir": "/tmp/certificates",
                   "kubelet-preferred-address-types": "InternalIP",
-                  "kubelet-insecure-tls": "true",
-                  "requestheader-client-ca-file": "/keys/front-proxy-ca/tls.crt",
-                  "requestheader-allowed-names": "front-proxy-client",
+                  "kubelet-insecure-tls": "true",  // FIXME
+                  "requestheader-client-ca-file": "/keys/front-proxy-ca/ca.crt",
+                  requestheader_allowed_names_:: [$.secrets.front_proxy_client.spec.commonName],
+                  "requestheader-allowed-names": std.join(",", std.set(self.requestheader_allowed_names_)),
                 },
                 env_+: {
                   GOGC: "25",
@@ -1256,7 +1328,7 @@ local bootstrapTolerations = [{
         },
         group: "metrics.k8s.io",
         version: "v1beta1",
-        insecureSkipTLSVerify: true,
+        insecureSkipTLSVerify: true,  // FIXME
         groupPriorityMinimum: 100,
         versionPriority: 100,
       },
