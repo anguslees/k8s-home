@@ -656,9 +656,12 @@ local CA(name, namespace, issuer) = {
                   "requestheader-group-headers": "X-Remote-Group",
                   "requestheader-client-ca-file": "/keys/front-proxy-client/ca.crt",
 
-                  // Workaround old coreos update-operator code.
-                  // https://github.com/coreos/container-linux-update-operator/issues/196
-                  "runtime-config": "extensions/v1beta1/daemonsets=true",
+                  runtime_config_:: {
+                    // Workaround old coreos update-operator code.
+                    // https://github.com/coreos/container-linux-update-operator/issues/196
+                    "extensions/v1beta1/daemonsets": true,
+                  },
+                  "runtime-config": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.runtime_config_)]),
                 },
                 env_+: {
                   POD_IP: kube.FieldRef("status.podIP"),
