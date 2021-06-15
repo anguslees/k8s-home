@@ -1,0 +1,49 @@
+#!/bin/sh
+
+set -e
+
+D="$1"
+v="$2"
+csum="$3"
+os=linux
+arch=amd64
+
+if [ -x $D/kubelet-$v/kubelet ]; then
+    exit 0
+fi
+
+dir=$(mktemp -d)
+trap "rm -r $dir" EXIT
+cd $dir
+
+echo "Downloading https://dl.k8s.io/$v/kubernetes-node-$os-$arch.tar.gz"
+wget --progress=dot -e dotbytes=1M https://dl.k8s.io/$v/kubernetes-node-$os-$arch.tar.gz
+echo "$csum" kubernetes-node-$os-$arch.tar.gz | sha512sum -c
+
+echo "Extracting archive"
+if [ -d $D/kubelet-$v ]; then
+    rm -r $D/kubelet-$v
+fi
+mkdir -p $D/kubelet-$v.new
+tar zxf kubernetes-node-$os-$arch.tar.gz -C $D/kubelet-$v.new --strip-components=3 kubernetes/node/bin
+mv $D/kubelet-$v.new $D/kubelet-$v
+
+if [ ! -x $D/kubelet-$v/kubelet ]; then
+    echo "Failed -x sanity check: $D/kubelet-$v/kubelet" >&2
+    exit 1
+fi
+
+ln -sf kubelet-$v/kubelet $D/kubelet
+
+echo "Checking for other versions"
+for d in $D/kubelet-*; do
+    case $d in
+        */kubelet-$v) ;;
+        *)
+            echo "Removing other version ${d#*/}"
+            rm -r $d
+            ;;
+    esac
+done
+
+exit 0
