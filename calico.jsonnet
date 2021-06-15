@@ -4,7 +4,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local version = "v3.15.3";
+local version = "v3.18.1";
 
 local mtu = 1440;
 local calico_backend = "bird";
@@ -337,13 +337,14 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
               cnietc: kube.HostPathVolume("/etc/cni/net.d"),
               policysync: kube.HostPathVolume("/var/run/nodeagent", "DirectoryOrCreate"),
               flexvol: kube.HostPathVolume("/var/lib/kubelet/volumeplugins/nodeagent~uds", "DirectoryOrCreate"),
+              sysfspbf: kube.HostPathVolume("/sys/fs/bpf", "Directory"),
             },
 
             initContainers_+: {
               // upgrade-ipam not needed for fresh installs
               install: kube.Container("install-cni") {
                 image: "calico/cni:" + version,
-                command: ["/install-cni.sh"],
+                command: ["/opt/cni/bin/install"],
                 env_+: {
                   CNI_CONF_NAME: "10-calico.conflist",
                   CNI_NETWORK_CONFIG: kube.ConfigMapRef($.config, "cni_network_config"),
@@ -412,6 +413,7 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
                   varrun: {mountPath: "/var/run/calico"},
                   varlib: {mountPath: "/var/lib/calico"},
                   policysync: {mountPath: "/var/run/nodeagent"},
+                  sysfspbf: {mountPath: "/sys/fs/bpf"}, // for BPF mode
                 },
               },
             },
