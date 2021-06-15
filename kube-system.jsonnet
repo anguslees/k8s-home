@@ -14,7 +14,7 @@ local certman = import "cert-manager.jsonnet";
 // 1. apiserver first
 // 2. rest of control plane
 // 3. kubelets (see coreos-pxe-install.jsonnet:coreos_kubelet_tag)
-local version = "v1.18.6";
+local version = "v1.19.9";
 local apiserverVersion = version;
 
 local externalHostname = "kube.lan";
@@ -899,6 +899,14 @@ local CA(name, namespace, issuer) = {
       },
       subjects_: [$.scheduler.sa],
     },
+    authreader: kube.RoleBinding("extension-apiserver-authentication-reader") + $.namespace {
+      roleRef: {
+        apiGroup: "rbac.authorization.k8s.io",
+        kind: "Role",
+        name: "extension-apiserver-authentication-reader",
+      },
+      subjects_: [$.scheduler.sa, $.controller_manager.sa],
+    },
 
     deploy: kube.Deployment("kube-scheduler") + $.namespace {
       local this = self,
@@ -948,7 +956,7 @@ local CA(name, namespace, issuer) = {
                   runAsUser: 65534,
                 },
                 resources+: {
-                  requests: {cpu: "100m"},
+                  requests: {cpu: "100m", memory: "60Mi"},
                 },
               },
             },
@@ -1339,5 +1347,24 @@ local CA(name, namespace, issuer) = {
         versionPriority: 100,
       },
     },
+  },
+
+  defaultPrioClass: kube._Object("scheduling.k8s.io/v1", "PriorityClass", "default") {
+    value: 1000,
+    globalDefault: true,
+    description: "Default priority class",
+  },
+
+  hiPrioClass: kube._Object("scheduling.k8s.io/v1", "PriorityClass", "high") {
+    value: 10000,
+    globalDefault: false,
+    description: "Priority class for pods that 'should' run, but are not cluster-critical",
+  },
+
+  batchPrioClass: kube._Object("scheduling.k8s.io/v1", "PriorityClass", "batch") {
+    value: 900,
+    preemptionPolicy: "Never",
+    globalDefault: false,
+    description: "Non-preempting priority class - for tasks that can wait",
   },
 }
