@@ -253,6 +253,7 @@ local filekey(path) = (
         },
         unit("var-vm-swapfile1.swap") {
           enable: true,
+          command: "start",
           content_:: {
             sections: {
               Unit: {
