@@ -813,7 +813,7 @@ local version = "v1.1.9";
                 ROOK_ALLOW_MULTIPLE_FILESYSTEMS: "false",
                 ROOK_LOG_LEVEL: "INFO",
                 ROOK_MON_HEALTHCHECK_INTERVAL: "45s",
-                ROOK_MON_OUT_TIMEOUT: "600s",
+                ROOK_MON_OUT_TIMEOUT: "20m", // Default 10m
                 ROOK_HOSTPATH_REQUIRES_PRIVILEGED: "false",
                 ROOK_ENABLE_SELINUX_RELABELING: "false",
                 ROOK_ENABLE_FSGROUP: "true",
