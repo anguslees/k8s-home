@@ -426,7 +426,7 @@ local CA(name, namespace, issuer) = {
     },
 
     // kubeadm uses /etc/kubernetes/pki/apiserver.{crt,key}
-    apiserver: utils.HashedSecret("kube-apiserver") + $.namespace {
+    apiserver: kube.Secret("kube-apiserver") + $.namespace {
       type: tlsType,
       data_: {
         "tls.crt": importstr "pki/apiserver.crt",
@@ -436,7 +436,7 @@ local CA(name, namespace, issuer) = {
     },
 
     // kubeadm uses /etc/kubernetes/pki/apiserver-kubelet-client.{crt,key}
-    apiserver_kubelet_client: utils.HashedSecret("kube-apiserver-kubelet-client") + $.namespace {
+    apiserver_kubelet_client: kube.Secret("kube-apiserver-kubelet-client") + $.namespace {
       type: tlsType,
       data_: {
         "tls.crt": importstr "pki/apiserver-kubelet-client.crt",
@@ -447,7 +447,7 @@ local CA(name, namespace, issuer) = {
 
     // kubeadm uses /etc/kubernetes/pki/sa.{pub,key}
     // TODO: auto-rotate this. (NB: 'public key' (not cert) is currently unsupported by cert-manager)
-    service_account: utils.HashedSecret("kube-service-account") + $.namespace {
+    service_account: kube.Secret("kube-service-account") + $.namespace {
       data_: {
         "key.pub": importstr "pki/sa.pub",
         "key.key": importstr "pki/sa.key",
