@@ -41,14 +41,25 @@ Go to k8s config section.
 
 *** On nodes (containos):
 
-Cert hash: (on master) `openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex`
-Get new token: (on master) `kubeadm token create --ttl 12h --print-join-command`
+Go back to kubeadm 1.12.x (yes, that's right - this was the last
+version before they required reading the 'kube-proxy' configmap as
+part of node join, via the ability to read *all kube-system
+configmaps* as node bootstrapper)
+
+#RELEASE="$(curl -sSL https://dl.k8s.io/release/stable.txt)"
+RELEASE=v1.12.5
+curl -L --remote-name-all https://storage.googleapis.com/kubernetes-release/release/${RELEASE}/bin/linux/amd64/kubeadm
+
+Get new token: (with cluster-admin, this works with current kubeadm)
+ `KUBECONFIG=$HOME/.kube/homeconf kubeadm token create --ttl 12h --print-join-command`
+(Note! kubeadm interprets key/cert relative paths incorrectly, so
+needs to be run from ~/.kube/)
 
 kubeadm join \
   --node-name=$(cat /etc/machine-id) \
   --discovery-token-ca-cert-hash=sha256:$certhash \
   --token $token kube.lan:6443 \
-  --ignore-preflight-errors=Swap,CRI
+  --ignore-preflight-errors=all
 
 **** bananapi fyi:
 
@@ -57,11 +68,11 @@ Can flash leds to identify a physical machine:
     echo heartbeat > /sys/class/leds/bananapi:green:usr/trigger
     echo none > /sys/class/leds/bananapi:green:usr/trigger
 
-*** On nodes (coreos):
+*** On nodes (flatcar):
 
-PXE boot into coreos (on ramdisk).
-wget http://192.168.0.9:31069/coreos-kube.ign
-sudo coreos-install -d /dev/sda -i coreos-kube.ign
+PXE boot into flatcar (on ramdisk).
+wget http://kube.lan:31069/pxe-config.ign
+sudo flatcar-install -d /dev/sda -C beta -i pxe-config.ign
 reboot
 
 docker run --rm -it \
@@ -174,6 +185,80 @@ Copy /etc/kubernetes/pki/ca.key over to new machine(s)
 
 ETCD_NAME=kmaster3; POD_IP=192.168.0.128; docker run --rm --net=host -v /var/lib/etcd:/var/lib/etcd -v /etc/kubernetes/pki:/keys gcr.io/google_containers/etcd-arm:3.0.17 etcd --advertise-client-urls=https://${POD_IP}:2379 --data-dir=/var/lib/etcd --listen-client-urls=http://127.0.0.1:2379,https://${POD_IP}:2379 --initial-cluster=default=https://192.168.0.9:2380,${ETCD_NAME}=https://${POD_IP}:2380 --initial-advertise-peer-urls=https://${POD_IP}:2380 --initial-cluster-state=existing --cert-file=/keys/etcd-${ETCD_NAME}-server.pem --key-file=/keys/etcd-${ETCD_NAME}-server-key.pem --peer-cert-file=/keys/etcd-${ETCD_NAME}-peer.pem --peer-key-file=/keys/etcd-${ETCD_NAME}-peer-key.pem --peer-client-cert-auth --peer-trusted-ca-file=/keys/etcd-ca.pem --listen-peer-urls=https://${POD_IP}:2380 --client-cert-auth --trusted-ca-file=/keys/etcd-ca.pem --election-timeout=10000 --heartbeat-interval=1000
 
+** etcd care and feeding
+
+*** New node
+
+NB: remove old dead nodes _before_ adding new nodes.  See etcd FAQ for
+discussion.
+
+Add to known members:
+kubectl -n kube-system edit configmap etcd
+kubectl -n kube-system exec $existing_etcd_pod -- \
+  env ETCDCTL_API=3 \
+  etcdctl member add $name --peer-urls=https://<pod ip>:2380
+
+**** Replacement of failed node:
+- Careful when changing! StatefulSets don't (yet) support
+  updateStrategy.minAvailable, so 1x failed + 1x updating can lead to 2 down.
+
+***** What I did:
+- Add to etcdMembers. Push.
+  This updates certificate+secret, and nodeSelector. (good)
+
+  .. And also changes etcd command line, which leads to 2x
+  etcd down :scream:  Would a StatefulSet partition (of zero nodes)
+  have helped here?
+- Copy checkpointed manifest+secrets off the one remaining etcd, hack
+  podspec to match mistakenly killed node, and use to bring back 2x
+  working replicas.  Will need to repeat occasionally, until
+  checkpoints converge.
+- etcdctl remove/add new member.  etcd scheduled on new node, and
+  (after etcdctl membership change) came up.  This worked well.
+- statefulset continued the semantic-noop update of remaining pods
+  with the new initial-cluster flag value.
+
+***** Next time?
+- Delete the dead node first.  It's not coming back, let everything
+  else failover/restart as expected early in the process.
+- Do the etcdctl membership remove/add first, while 2 nodes are up.
+  Again, the dead node isn't coming back.
+- Try the partition thing.  Basically want to update cert + expand
+  nodeSelector *but under no circumstances restart existing/healthy
+  etcd peer*.
+
+Change hostnames to use symbolic etcd-[0-2] names?
+apiserver still needs to know IPs - or a hostname?
+initial cluster peers need IPs too. needs to match current state to
+avoid update.  another hostname?
+
+Aha! Use a learner as a 'warm spare'.  Run replicas=4, but one of the
+members is a 'learner' according to etcd.  After failure, we can
+promote the learner to full member with etcdctl command (no k8s
+changes required), and get back to 3 nodes.  Then can use regular k8s
+operations to replace node and schedule a new learner (ok, even if
+that replacement takes temporarily takes an etcd node down since we're
+now back to 3 full members).
+
+**** Disaster Recovery
+
+***** etcd
+
+1. Copy static manifests around from (hopefully) a remaining good node.
+2. Get etcd up.  No point fixing anything else until this happens.
+
+***** apiserver
+
+Regenerate static manifest:
+kubecfg show bootstrap.jsonnet -o json
+
+d=/etc/kubernetes/checkpoint-secrets/kube-system/etcd-2/etcd-peer
+ETCDCTL_API=3 etcdctl \
+ --endpoints https://192.168.0.161:2379 \
+ --cacert=$d/ca.crt --key=$d/tls.key --cert=$d/tls.crt \
+ member list
+
+
 ** Upgrade
 
 kubeadm binaries available from
@@ -186,8 +271,7 @@ a 6month expiry.
 *** v1.9 upgrade:
 
 stash kubeadm-arm-v1.9.10 locally in ipfs:
-wget -O- https://dl.k8s.io/release/v1.9.10/bin/linux/arm/kubeadm |
-ipfs add -
+ipfs add https://dl.k8s.io/release/v1.9.10/bin/linux/arm/kubeadm
 QmSdVUeRF5QkSDZAd4sNMoH7AYANpXa4J9ME3TMQu8tVgh
 
 On a master:
@@ -199,3 +283,32 @@ Fetch kubeadm binary to /var/lib
 *** v1.10 upgrade:
 
 kubeadm-arm-v1.10.12: QmSboULs6WEs9Q2R1HV21HRAWmbUNRkS9cvJMnRuvU5xfz
+
+*** v1.11 upgrade:
+
+**** Cert renewal
+
+Remove (backup)
+ {apiserver,apiserver-kubelet-client,front-proxy-client}.{crt,key}
+Regen (run make)
+Copy out to nodes
+ scp {apiserver,apiserver-kubelet-client,front-proxy-client}.{crt,key} $node:/etc/kubernetes/pki/
+
+**** Regular upgrade
+
+note: CoreDNS replaces kube-dns as the default DNS provider
+
+note: Clusters still using Heapster for autoscaling should be migrated
+over to metrics-server and the custom metrics API
+
+note: kube-proxy IPVS  (note graceful termination is in v1.13)
+
+note: sysctl support is now considered beta
+
+kubeadm-arm-v1.11.10: QmaZ5cnybq5jPdjGk4Anght9xSoch1ExFfm2JQu49NBDPw
+
+1. update jsonnet kube-system manifests
+2. ./push.sh
+3. yolo manual delete of kube-dns svc, bring up coredns svc, check, delete
+   kube-dns deploy
+4. ./coreos-update-all.sh
