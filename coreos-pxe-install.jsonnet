@@ -308,8 +308,16 @@ local filekey(path) = (
             },
           },
         })),
-      file("/etc/sysctl.d/80-swappiness.conf",
+      file("/etc/sysctl.d/80-garagecloud.conf",
         "vm.swappiness=10\n"),
+      file("/run/systemd/network/zz-default.network.d/garagecloud.conf",
+        std.manifestIni({
+          sections: {
+            Network: {
+              IPv6AcceptRA: "true",
+            },
+          },
+        })),
       file("/etc/docker/daemon.json",
         kubecfg.manifestJson({
           "exec-opts": ["native.cgroupdriver=systemd"],
@@ -375,6 +383,7 @@ local filekey(path) = (
           volumes_: {
             config: kube.ConfigMapVolume($.cloud_config),
             dest: kube.HostPathVolume("/var/lib/flatcar-install", "DirectoryOrCreate"),
+            kubeca: kube.HostPathVolume("/var/lib/kubelet/pki/kube-ca", "DirectoryOrCreate"),
           },
           tolerations+: utils.toleratesMaster,
           priorityClassName: "system-node-critical",
@@ -382,10 +391,16 @@ local filekey(path) = (
           terminationGracePeriodSeconds: 0,
           initContainers_+: {
             copy: utils.shcmd("copy") {
-              shcmd: 'cp /config/user_data /dest/',
+              shcmd: "cp /config/user_data /dest/",
               volumeMounts_+: {
                 config: {mountPath: "/config", readOnly: true},
                 dest: {mountPath: "/dest"},
+              },
+            },
+            cacopy: utils.shcmd("cacopy") {
+              shcmd: "cp /var/run/secrets/kubernetes.io/serviceaccount/ca.crt /kube-ca/ca.crt",
+              volumeMounts_+: {
+                kubeca: {mountPath: "/kube-ca"},
               },
             },
           },
@@ -486,6 +501,7 @@ local filekey(path) = (
         boot
         goto error
 
+        # Doesn't actually do anything, since the ignition 'install' just configures the ramdisk :/
         :worker_install
         cpuid --ext 29 && set arch amd64 || set arch i386
         set base-url http://beta.release.flatcar-linux.net/${arch}-usr/current
@@ -582,6 +598,7 @@ local filekey(path) = (
   tftpboot_fetch:: utils.shcmd("tftp-fetch") {
     shcmd:: |||
       cd /data
+      rm -f undionly.kpxe ipxe.efi ipxe.pxe
       wget http://boot.ipxe.org/undionly.kpxe
       ln -sf undionly.kpxe undionly.0
       wget http://boot.ipxe.org/ipxe.efi
