@@ -269,6 +269,16 @@ local kubecfg = import "kubecfg.libsonnet";
             runAsNonRoot: true,  // should run as ipfs
             fsGroup: 100, // "users"
             runAsUser: 1000, // "ipfs"
+            sysctls_:: {
+              // Required for decent QUIC performance
+              //'net.core.rmem_default': 2 * 1024 * 1024, // bytes
+              // Not on the default allowed list.  TODO: add .. or something.
+              //'net.core.rmem_max': 2 * 1024 * 1024,
+            },
+            sysctls: [
+              {name: kv[0], value: std.toString(kv[1])}
+              for kv in kube.objectItems(self.sysctls_)
+            ],
           },
           volumes_+: {
             conf: kube.SecretVolume($.conf),
@@ -295,7 +305,7 @@ local kubecfg = import "kubecfg.libsonnet";
           },
           containers_+: {
 	    ipfs: kube.Container("ipfs") {
-	      image: "ipfs/go-ipfs:v0.6.0",
+	      image: "ipfs/go-ipfs:v0.7.0",
               command: ["start_ipfs", "daemon", "--migrate"],
 	      env_+: {
 		//IPFS_LOGGING: "debug",
