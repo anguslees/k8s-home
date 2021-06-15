@@ -1020,7 +1020,7 @@ local CA(name, namespace, issuer) = {
             volumes_+: {
               kubeconfig: kube.ConfigMapVolume($.kubeconfig_in_cluster),
               etc_k8s: kube.HostPathVolume("/etc/kubernetes"),
-              var_run: kube.HostPathVolume("/var/run"),
+              var_run: kube.HostPathVolume("/run"), // TODO: expose only /run/containerd/containerd.sock and lock path
             },
             containers_+: {
               checkpointer: kube.Container("checkpointer") {
