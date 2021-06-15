@@ -2,13 +2,16 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local coreos_kubelet_tag = "v1.18.6";
+local kubelet_tag = "v1.19.9";
+// sha512 for linux/amd64 'node binaries' tarball
+local kubelet_sha512 = "0d6cfe1bed8a960b373d5403fc849621d08ce302ca2dd8a4ac1f1dee7dd6ee03a5875a6846f237b45432f4511bdd3cd6d1085d466cad4c3c33fbe1ed28e599ad";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)
   //http_proxy: "http://proxy.lan:80/",
-  http_proxy: "http://192.168.0.10:3128/",
-  no_proxy: ".lan,.local",
+  // Causes more surprises than it solves.
+  //http_proxy: "http://192.168.0.10:3128/",
+  //no_proxy: ".lan,.local",
 };
 
 local arch = "amd64";
@@ -80,25 +83,6 @@ local filekey(path) = (
             },
           },
         },
-        /* FIXME: Work out if socket activation is meant to be supported
-        unit("kube-containerd.socket") {
-          enable: true,
-          content_:: {
-            sections: {
-              Unit: {
-                Description: "Containerd Socket",
-                PartOf: "kube-containerd.service",
-              },
-              Socket: {
-                ListenStream: "/run/containerd/containerd.sock",
-                SocketMode: "0660",
-                SocketUser: "root",
-                SocketGroup: "root",
-              },
-            },
-          },
-        },
-         */
         unit("kube-containerd.service") {
           enable: true,
           content_:: {
@@ -113,8 +97,8 @@ local filekey(path) = (
               },
               Service: {
                 Environment: "CONTAINERD_CONFIG=/etc/containerd/config.toml",
+                Slice: "podruntime.slice",
                 ExecStart: "/usr/bin/containerd -a /run/containerd/containerd.sock --config ${CONTAINERD_CONFIG}",
-                //Type: "notify",
                 Delegate: "yes",
                 KillMode: "process",
                 Restart: "always",
@@ -133,40 +117,32 @@ local filekey(path) = (
           content_:: {
             sections: {
               Unit: {
-                Description: "Kubelet via Hyperkube ACI",
+                Description: "Kubelet",
                 After: "network.target kube-containerd.service",
                 Wants: "kube-containerd.service",
               },
               Service: {
                 EnvironmentFile: "/etc/kubernetes/kubelet.env",
-                Environment: 'RKT_RUN_ARGS="%s"' % std.join(" ", [
-                  "--uuid-file-save=/var/cache/kubelet-pod.uuid",
-                ] + [
-                  local name(path) = utils.stripLeading(
-                    "-", std.join("", [if utils.isalpha(c) then c else "-"
-                      for c in std.stringChars(std.asciiLower(path))]));
-                  "--volume=%(n)s,kind=host,source=%(p)s --mount volume=%(n)s,target=%(p)s" % {n: name(p), p: p}
-                  for p in ["/etc/resolv.conf", "/var/lib/cni", "/etc/cni/net.d", "/opt/cni/bin", "/var/log", "/var/lib/local-data", "/var/lib/calico", "/var/lib/containerd", "/boot/EFI"]
-                ]),
                 ExecStartPre: [
-                  "-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid",
                   "/bin/mkdir -p " + std.join(" ", [
                     "/opt/cni/bin",
-                    "/etc/kubernetes/manifests",
                     "/etc/cni/net.d",
-                    "/etc/kubernetes/checkpoint-secrets",
-                    "/etc/kubernetes/inactive-manifests",
-                    "/var/lib/cni",
-                    "/var/lib/kubelet/volumeplugins",
-                    "/var/lib/local-data",
-                    "/var/lib/calico",
                   ]),
+                  "/opt/bin/download-kubelet /opt/kubelet ${KUBELET_VERSION} ${KUBELET_SHA512}",
                 ],
-                // ExecStartPre=/usr/bin/bash -c "grep 'certificate-authority-data' /etc/kubernetes/kubeconfig | awk '{print $2}' | base64 -d > /etc/kubernetes/ca.crt"
-                ExecStart: std.join(" ", ["/usr/lib/coreos/kubelet-wrapper"] + [
-                  "--%s=%s" % kv for kv in kube.objectItems(self.args_)]),
+                Slice: "podruntime.slice",
+                // TODO: /v/l/kubelet/plugins{,_registry} should maybe move to /run
+                ConfigurationDirectory: std.join(" ", ["kubernetes", "kubernetes/manifests", "kubernetes/checkpoint-secrets", "kubernetes/inactive-manifests"]),
+                LogsDirectory: std.join(" ", ["pods", "containers"]),
+                StateDirectory: std.join(" ", ["kubelet", "kubelet/volumeplugins", "cni", "local-data", "calico"]),
+                ExecStart: std.join(" \\\n ", [
+                  "/opt/kubelet/kubelet",
+                ] + [
+                  "--%s=%s" % kv for kv in kube.objectItems(self.args_)
+                ]),
                 // https://github.com/kubernetes/release/blob/master/rpm/10-kubeadm.conf
                 args_:: {
+                  //v: 3,
                   "anonymous-auth": false,
                   "client-ca-file": "/etc/kubernetes/pki/ca.crt",
                   "authentication-token-webhook": true,
@@ -178,13 +154,14 @@ local filekey(path) = (
                   "pod-max-pids": "10000",
                   "fail-swap-on": false,
                   "cgroup-driver": "systemd",
+                  "cgroup-root": "/",
                   "container-runtime": "remote",
                   "container-runtime-endpoint": "unix:///run/containerd/containerd.sock",
                   "hostname-override": "%m",
                   "lock-file": "/var/run/lock/kubelet.lock",
                   "network-plugin": "cni",
                   "cni-conf-dir": "/etc/cni/net.d",
-                  "cni-bin-dir": "/opt/cni/bin",
+                  "cni-bin-dir": "/opt/cni/bin",  // TODO: move cni to a /run directory?
                   "pod-manifest-path": "/etc/kubernetes/manifests",
                   "rotate-certificates": true,
                   "rotate-server-certificates": true,
@@ -201,6 +178,22 @@ local filekey(path) = (
                   // TODO: compare these to defaults:
                   "runtime-request-timeout": "10m",
                   "sync-frequency": "5m",
+                  kube_reserved_:: { // NB: not enforced
+                    cpu: "100m",
+                    memory: "256Mi",
+                    "ephemeral-storage": "256Mi",
+                    pid: 100,
+                  },
+                  "kube-reserved": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.kube_reserved_)]),
+                  "kube-reserved-cgroup": "/podruntime.slice",
+                  system_reserved_:: { // NB: not enforced
+                    cpu: "10m",
+                    memory: "100Mi",
+                    "ephemeral-storage": "500Mi",
+                    pid: 1000,
+                  },
+                  "system-reserved": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.system_reserved_)]),
+                  "system-reserved-cgroup": "/system.slice",
                   eviction_:: {
                     "nodefs.available": {
                       hard: "1Gi",
@@ -225,10 +218,9 @@ local filekey(path) = (
                   "eviction-soft-grace-period": manifestEviction("soft_grace_period", "%s=%s"),
                   "eviction-max-pod-grace-period": "600",
                 },
-                ExecStop: "-/usr/bin/rkt stop --uuid-file=/var/cache/kubelet-pod.uuid",
-                ExecStopPost: "-/usr/bin/rkt rm --uuid-file=/var/cache/kubelet-pod.uuid",
                 Restart: "always",
                 RestartSec: "5",
+                StartLimitInterval: "0",
               },
               Install: {
                 WantedBy: "multi-user.target",
@@ -287,12 +279,19 @@ local filekey(path) = (
       content: content,
     },
     write_files: [
+      file("/opt/bin/download-kubelet", importstr "download-kubelet") {
+        permissions: "0755",
+      },
       file("/etc/kubernetes/kubelet.env", |||
+        # TODO: most of this is obsolete - remove.
+        KUBELET_IMAGE=quay.io/poseidon/kubelet:%(tag)s
         KUBELET_IMAGE_URL=docker://k8s.gcr.io/hyperkube
         KUBELET_IMAGE_TAG=%(tag)s
+        KUBELET_VERSION=%(tag)s
+        KUBELET_SHA512=%(sha512)s
         KUBELET_IMAGE_ARGS=--exec=kubelet
         RKT_GLOBAL_ARGS="--insecure-options=image"
-      ||| % {tag: coreos_kubelet_tag},
+      ||| % {tag: kubelet_tag, sha512: kubelet_sha512},
       ),
       file("/etc/sysctl.d/max-user-watches.conf", |||
         fs.inotify.max_user_watches=16184
@@ -402,9 +401,9 @@ local filekey(path) = (
                     // it should block on every change implied by
                     // initContainer (perhaps even require a reboot).
                     "/bin/sh", "-e", "-x", "-c", |||
-                      v="$(wget -qO- http://localhost:10255/metrics | sed -n 's/^kubernetes_build_info{.*gitVersion="\([^"]*\)".*/\1/p')"
+                      v="$(wget -qO- http://localhost:10255/metrics | sed -n 's/^kubernetes_build_info{.*git_version="\([^"]*\)".*/\1/p')"
                       test "$v" = %s
-                    ||| % std.escapeStringBash(coreos_kubelet_tag),
+                    ||| % std.escapeStringBash(kubelet_tag),
                   ],
                 },
                 timeoutSeconds: 30,
