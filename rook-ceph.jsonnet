@@ -17,6 +17,8 @@ local cephVersion = "v14.2.6-20200115";
     data+: {
       config: |||
         [global]
+        # Avoid mon sync DoSing the sync source https://tracker.ceph.com/issues/42830
+        mon sync max payload size = 4096
         # Default of 0.05 is too aggressive for my cluster. (seconds)
         mon clock drift allowed = 0.1
         # K8s image-gc-low-threshold is 80% - not much point warning
