@@ -27,10 +27,12 @@ local dnsDomain = "cluster.local";
 // NB: these IPs are also burnt into the peer/server certificates,
 // because of the golang TLS verification wars.
 local etcdMembers = {
-  "fc4698cdc1184810a2c3447a7ee66689": "192.168.0.129",  // etcd-0
-  "e5b2509083d942b5909c7b32e0460c54": "192.168.0.102",  // etcd-1
-  "0b5642a6cc18493d81a606483d9cbb7b": "192.168.0.132",  // etcd-2
+  "fc4698cdc1184810a2c3447a7ee66689": "192.168.0.129",  // etcd-2 - Red HP
+  "0b5642a6cc18493d81a606483d9cbb7b": "192.168.0.132",  // etcd-1 - Red Lenovo
+  "887f1b514ea54520a61643163d427d42": "192.168.0.161",  // etcd-0 - Old tower
+  "765885d83e774555bc7ee0f9c6fc1178": "192.168.0.117",  // Dell silver/stickers (new)
 };
+local etcdLearners = std.set(["765885d83e774555bc7ee0f9c6fc1178"]);
 
 local isolateMasters = false;
 
@@ -165,7 +167,7 @@ local CA(name, namespace, issuer) = {
     deploy: kube.StatefulSet("etcd") + $.namespace {
       local this = self,
       spec+: {
-        replicas: 3,
+        replicas: 4, // 3 full + 1 learner
         podManagementPolicy: "Parallel",
         updateStrategy+: {
           type: "RollingUpdate",
@@ -623,7 +625,8 @@ local CA(name, namespace, issuer) = {
                   "tls-cipher-suites": "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_128_GCM_SHA256",
 
                   "etcd-servers": std.join(",", [
-                    "https://%s:2379" % v for v in kube.objectValues(etcdMembers)
+                    "https://%s:2379" % etcdMembers[k] for k in std.objectFields(etcdMembers)
+                    if !std.setMember(k, etcdLearners)
                   ]),
 
                   "advertise-address": "$(POD_IP)",
