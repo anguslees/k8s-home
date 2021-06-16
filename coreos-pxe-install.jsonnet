@@ -2,9 +2,9 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
-local kubelet_tag = "v1.19.9";
+local kubelet_tag = "v1.20.7";
 // sha512 for linux/amd64 'node binaries' tarball
-local kubelet_sha512 = "0d6cfe1bed8a960b373d5403fc849621d08ce302ca2dd8a4ac1f1dee7dd6ee03a5875a6846f237b45432f4511bdd3cd6d1085d466cad4c3c33fbe1ed28e599ad";
+local kubelet_sha512 = "4c46d50eb0e5242c1e0071ffcc137d98f02e8b65368437be5dc7f85a66c0b7ecfacb56dedb2dd1fa9c1576bf74d6cd631387c02b907b7d5e3b43f30f54513d67";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)

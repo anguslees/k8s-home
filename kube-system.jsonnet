@@ -14,7 +14,7 @@ local certman = import "cert-manager.jsonnet";
 // 1. apiserver first
 // 2. rest of control plane
 // 3. kubelets (see coreos-pxe-install.jsonnet:coreos_kubelet_tag)
-local version = "v1.19.9";
+local version = "v1.20.7";
 local apiserverVersion = version;
 
 local externalHostname = "kube.lan";
@@ -587,12 +587,7 @@ local CA(name, namespace, issuer) = {
             tolerations+: bootstrapTolerations,
             volumes_+: {
               kubelet_client: kube.SecretVolume($.secrets.apiserver_kubelet_client),
-              sa: kube.SecretVolume($.secrets.service_account) {
-                secret+: {
-                  // restrict to public key only
-                  items: [{key: "key.pub", path: self.key}],
-                },
-              },
+              sa: kube.SecretVolume($.secrets.service_account),
               ca_bundle: kube.SecretVolume($.secrets.ca_bundle),
               fpc: kube.SecretVolume($.secrets.front_proxy_client.secret_),
               tls: kube.SecretVolume($.secrets.apiserver),
@@ -617,8 +612,6 @@ local CA(name, namespace, issuer) = {
                   "profiling": "false",
                   "allow-privileged": "true",
                   "service-cluster-ip-range": serviceClusterCidr,
-                  // Flag --insecure-port has been deprecated, This flag will be removed in a future version.
-                  "insecure-port": "0",
                   "secure-port": "6443",
                   "authorization-mode": "Node,RBAC",
                   "tls-min-version": "VersionTLS12",
@@ -632,6 +625,7 @@ local CA(name, namespace, issuer) = {
                   "advertise-address": "$(POD_IP)",
                   "external-hostname": externalHostname,
 
+                  "etcd-healthcheck-timeout": "20s", // default 2s
                   "etcd-count-metric-poll-period": "10m", // default 1m
                   "watch-cache": "false",  // disable to conserve precious ram
                   //"default-watch-cache-size": "0", // default 100
@@ -642,7 +636,9 @@ local CA(name, namespace, issuer) = {
 
                   "kubelet-client-certificate": "/keys/apiserver-kubelet-client/tls.crt",
                   "kubelet-client-key": "/keys/apiserver-kubelet-client/tls.key",
+                  "service-account-issuer": "https://%s:%s" % [self["external-hostname"], self["secure-port"]],
                   "service-account-key-file": "/keys/sa/key.pub",
+                  "service-account-signing-key-file": "/keys/sa/key.key",
                   "client-ca-file": "/keys/ca-bundle/ca.crt",
                   "proxy-client-cert-file": "/keys/front-proxy-client/tls.crt",
                   "proxy-client-key-file": "/keys/front-proxy-client/tls.key",
@@ -674,7 +670,7 @@ local CA(name, namespace, issuer) = {
                   https: {containerPort: 6443, protocol: "TCP"},
                 },
                 livenessProbe: {
-                  httpGet: {path: "/healthz", port: 6443, scheme: "HTTPS"},
+                  httpGet: {path: "/livez", port: 6443, scheme: "HTTPS"},
                   failureThreshold: 10,
                   initialDelaySeconds: 300,
                   periodSeconds: 30,
@@ -727,13 +723,13 @@ local CA(name, namespace, issuer) = {
             dnsPolicy: "ClusterFirstWithHostNet",
             // Moved to a nodeAffinity rule, to workaround a limitation
             // with pod-checkpointer (or arguably kubelet).
-            //nodeSelector+: {"node-role.kubernetes.io/master": ""},
+            //nodeSelector+: {"node-role.kubernetes.io/control-plane": ""},
             affinity+: {
               nodeAffinity+: {
                 requiredDuringSchedulingIgnoredDuringExecution+: {
                   nodeSelectorTerms: if isolateMasters then [
                     labelSelector({
-                      "node-role.kubernetes.io/master": "",
+                      "node-role.kubernetes.io/control-plane": "",
                     }),
                   ] else [
                     labelSelector({
@@ -794,7 +790,7 @@ local CA(name, namespace, issuer) = {
               },
             },
             serviceAccountName: $.controller_manager.sa.metadata.name,
-            [if isolateMasters then "nodeSelector"]+: {"node-role.kubernetes.io/master": ""},
+            [if isolateMasters then "nodeSelector"]+: {"node-role.kubernetes.io/control-plane": ""},
             tolerations+: utils.toleratesMaster + bootstrapTolerations,
             securityContext+: {
               runAsNonRoot: true,
@@ -923,7 +919,7 @@ local CA(name, namespace, issuer) = {
               },
             },
             tolerations+: utils.toleratesMaster + bootstrapTolerations,
-            [if isolateMasters then "nodeSelector"]+: {"node-role.kubernetes.io/master": ""},
+            [if isolateMasters then "nodeSelector"]+: {"node-role.kubernetes.io/control-plane": ""},
             serviceAccountName: $.scheduler.sa.metadata.name,
             containers_+: {
               scheduler: kube.Container("scheduler") {
@@ -1003,7 +999,7 @@ local CA(name, namespace, issuer) = {
             tolerations+: utils.toleratesMaster + bootstrapTolerations,
             // Moved to a nodeAffinity rule, to workaround a limitation
             // with pod-checkpointer (or arguably kubelet).
-            //nodeSelector+: {"node-role.kubernetes.io/master": ""},
+            //nodeSelector+: {"node-role.kubernetes.io/control-plane": ""},
             affinity+: {
               // Harmless to run everywhere, but only necessary
               // wherever checkpointed (apiserver) jobs are running
@@ -1011,7 +1007,7 @@ local CA(name, namespace, issuer) = {
                 requiredDuringSchedulingIgnoredDuringExecution+: {
                   nodeSelectorTerms: [
                     labelSelector({
-                      "node-role.kubernetes.io/master": "",
+                      "node-role.kubernetes.io/control-plane": "",
                     })
                   ],
                 },
