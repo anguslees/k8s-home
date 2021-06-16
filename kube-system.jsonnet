@@ -229,7 +229,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               etcd: kube.Container("etcd") {
-                image: "gcr.io/etcd-development/etcd:v3.4.14",
+                image: "gcr.io/etcd-development/etcd:v3.5.0",
                 securityContext+: {
                   allowPrivilegeEscalation: false,
                 },
@@ -266,33 +266,25 @@ local CA(name, namespace, issuer) = {
                   ETCDCTL_CACERT: "/keys/etcd-server/ca.crt",
                   ETCDCTL_CERT: "/keys/etcd-client/tls.crt",
                   ETCDCTL_KEY: "/keys/etcd-client/tls.key",
+                  // AA_POD_IP is a hack to force jsonnet to order it
+                  // before the variable is used in ETCDCTL_ENDPOINTS.
+                  // TODO: Teach kube.libsonnet about env variable
+                  // dependencies.
+                  AA_POD_IP: kube.FieldRef("status.podIP"),
+                  ETCDCTL_ENDPOINTS: "https://$(AA_POD_IP):2379/",
                   GOGC: "25",
                 },
                 livenessProbe: {
-                  local probe = self,
-                  // Looks like /health fails if endpoint is out of quorum :(
-                  //httpGet: {path: "/health", port: 2381, scheme: "HTTP"},
-                  exec: {
-                    etcdctl_args:: ["endpoint", "status"],
-                    command: [
-                      "etcdctl",
-                      "--dial-timeout=5s",
-                      "--command-timeout=%ds" % probe.timeoutSeconds,
-                      "--endpoints=https://127.0.0.1:2379",
-                      // "certificate is valid for 192.168.0.129, not 127.0.0.1"
-                      // We don't care, since we trust 127.0.0.1.
-                      "--insecure-skip-tls-verify",  // FIXME?
-                    ] + self.etcdctl_args,
-                  },
+                  // /health fails if endpoint is out of quorum, so don't use for liveness!
+                  tcpSocket: {port: 2381},
                   failureThreshold: 8,
                   initialDelaySeconds: 180,
                   timeoutSeconds: 15,
                   periodSeconds: 30,
                 },
                 readinessProbe: self.livenessProbe {
-                  exec+: {
-                    etcdctl_args: ["endpoint", "health"],
-                  },
+                  httpGet: {path: "/health", port: 2381, scheme: "HTTP"},
+                  tcpSocket: null,
                   failureThreshold: 3,
                 },
                 volumeMounts_+: {
