@@ -1282,7 +1282,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               default: kube.Container("metrics-server") {
-                image: "k8s.gcr.io/metrics-server:v0.3.6",
+                image: "k8s.gcr.io/metrics-server/metrics-server:v0.5.0",
                 command: ["/metrics-server"],
                 args_+: {
                   "logtostderr": "true",
@@ -1307,8 +1307,11 @@ local CA(name, namespace, issuer) = {
                   readOnlyRootFilesystem: true,
                   allowPrivilegeEscalation: false,
                 },
+                resources: {
+                  requests: {cpu: "100m", memory: "200Mi"},
+                },
                 livenessProbe: {
-                  httpGet: {path: "/healthz", port: 8443, scheme: "HTTPS"},
+                  httpGet: {path: "/livez", port: 8443, scheme: "HTTPS"},
                   initialDelaySeconds: 60,
                   failureThreshold: 10,
                   periodSeconds: 30,
@@ -1316,6 +1319,7 @@ local CA(name, namespace, issuer) = {
                   timeoutSeconds: 20,
                 },
                 readinessProbe: self.livenessProbe {
+                  httpGet+: {path: "/readyz"},
                   failureThreshold: 2,
                   successThreshold: 3,
                 },
