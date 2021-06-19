@@ -516,6 +516,9 @@ local CA(name, namespace, issuer) = {
                 ports_+: {
                   metrics: {containerPort: 10249},
                 },
+                resources+: {
+                  requests: {cpu: "20m", memory: "40Mi"},
+                },
                 securityContext: {
                   privileged: true,
                 },
@@ -676,7 +679,7 @@ local CA(name, namespace, issuer) = {
                   successThreshold: 3,
                 },
                 resources+: {
-                  requests: {cpu: "250m", memory: "550Mi"},
+                  requests: {cpu: "1000m", memory: "400Mi"},
                 },
                 volumeMounts_+: {
                   kubelet_client: {mountPath: "/keys/apiserver-kubelet-client", readOnly: true},
@@ -851,7 +854,7 @@ local CA(name, namespace, issuer) = {
                   varrunkubernetes: {mountPath: "/var/run/kubernetes"},
                 },
                 resources+: {
-                  requests: {cpu: "200m"},
+                  requests: {cpu: "50m", memory: "80Mi"},
                 },
               },
             },
@@ -944,7 +947,7 @@ local CA(name, namespace, issuer) = {
                   runAsUser: 65534,
                 },
                 resources+: {
-                  requests: {cpu: "100m", memory: "60Mi"},
+                  requests: {cpu: "10m", memory: "40Mi"},
                 },
               },
             },
@@ -1144,7 +1147,7 @@ local CA(name, namespace, issuer) = {
                 image: "k8s.gcr.io/coredns:1.6.2",
                 resources+: {
                   limits: {memory: "170Mi"},
-                  requests: {cpu: "100m", memory: "70Mi"},
+                  requests: {cpu: "50m", memory: "30Mi"},
                 },
                 args_+: {
                   conf: "/etc/coredns/Corefile",
@@ -1300,7 +1303,7 @@ local CA(name, namespace, issuer) = {
                   allowPrivilegeEscalation: false,
                 },
                 resources: {
-                  requests: {cpu: "100m", memory: "200Mi"},
+                  requests: {cpu: "10m", memory: "25Mi"},
                 },
                 livenessProbe: {
                   httpGet: {path: "/livez", port: 8443, scheme: "HTTPS"},

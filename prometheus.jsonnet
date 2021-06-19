@@ -555,9 +555,9 @@ local path_join(prefix, suffix) = (
                 command: ["/pod_nanny"],
                 args_+: {
                   container: spec.containers[0].name,
-                  cpu: "100m",
+                  cpu: "10m",
                   "extra-cpu": "1m",
-                  memory: "100Mi",
+                  memory: "10Mi",
                   "extra-memory": "2Mi",
                   deployment: deploy.metadata.name,
                 },
@@ -566,7 +566,7 @@ local path_join(prefix, suffix) = (
                   MY_POD_NAMESPACE: kube.FieldRef("metadata.namespace"),
                 },
                 resources: {
-                  limits: {cpu: "100m", memory: "30Mi"},
+                  limits: {cpu: "10m", memory: "30Mi"},
                   requests: self.limits,
                 },
               },

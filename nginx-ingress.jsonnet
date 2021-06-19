@@ -247,7 +247,7 @@ local metallb = (import "all.jsonnet").metallb;
                 initialDelaySeconds: 10,
               },
               resources: {
-                requests: {cpu: "10m", memory: "65Mi"},
+                requests: {cpu: "10m", memory: "120Mi"},
                 limits: { cpu: "1", memory: "500Mi" },
               },
             },

@@ -395,7 +395,7 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
                   capabilities: {add: ["NET_ADMIN"]},
                 },
                 resources: {
-                  requests: {memory: "40Mi", cpu: "200m"},
+                  requests: {cpu: "100m", memory: "160Mi"},
                 },
                 readinessProbe: {
                   exec: {
