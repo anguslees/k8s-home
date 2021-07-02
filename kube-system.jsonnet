@@ -14,8 +14,8 @@ local certman = import "cert-manager.jsonnet";
 // 1. apiserver first
 // 2. rest of control plane
 // 3. kubelets (see coreos-pxe-install.jsonnet:coreos_kubelet_tag)
-local version = "v1.20.7";
-local apiserverVersion = version;
+local version = "v1.21.2";
+local apiserverVersion = "v1.21.2";
 
 local externalHostname = "kube.lan";
 local apiServer = "https://%s:6443" % [externalHostname];
@@ -603,7 +603,7 @@ local CA(name, namespace, issuer) = {
                   "enable-bootstrap-token-auth": "true",
                   "kubelet-preferred-address-types": "InternalIP,ExternalIP,Hostname",
                   "enable-admission-plugins": "NodeRestriction",
-                  //"anonymous-auth": "false", bootkube has this, but not kubeadm
+                  "anonymous-auth": "true", // needed for healthchecks. TODO: change healthchecks.
                   "profiling": "false",
                   "allow-privileged": "true",
                   "service-cluster-ip-range": serviceClusterCidr,
@@ -611,6 +611,11 @@ local CA(name, namespace, issuer) = {
                   "authorization-mode": "Node,RBAC",
                   "tls-min-version": "VersionTLS12",
                   "tls-cipher-suites": "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_256_GCM_SHA384,TLS_RSA_WITH_AES_128_GCM_SHA256",
+
+                  // This is arguably a bad idea, but solves one
+                  // symptom with checkpointed apiserver pods
+                  // fighting with regular pods.
+                  "permit-address-sharing": "true",
 
                   "etcd-servers": std.join(",", [
                     "https://%s:2379" % etcdMembers[k] for k in std.objectFields(etcdMembers)
