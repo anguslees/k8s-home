@@ -310,6 +310,11 @@ local filekey(path) = (
         })),
       file("/etc/sysctl.d/80-garagecloud.conf",
         "vm.swappiness=10\n"),
+      file("/usr/share/oem/grub.cfg", |||
+        set linux_append="$linux_append coreos.config.url=oem:///coreos-install.json"
+        set linux_append="$linux_append systemd.unified_cgroup_hierarchy=1"
+      |||
+      ),
       file("/run/systemd/network/zz-default.network.d/garagecloud.conf",
         std.manifestIni({
           sections: {
@@ -344,7 +349,7 @@ local filekey(path) = (
                 default_runtime_name: "runc",
                 runtimes: {
                   runc: {
-                    runtime_type: "io.containerd.runtime.v1.linux",
+                    runtime_type: "io.containerd.runc.v2",
                     options: {
                       SystemdCgroup: true,
                     },
