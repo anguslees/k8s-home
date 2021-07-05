@@ -3,11 +3,18 @@ local kube = import "kube.libsonnet";
 {
   archSelector(arch):: {"kubernetes.io/arch": arch},
 
-  toleratesMaster:: [{
-    key: "node-role.kubernetes.io/master",
-    operator: "Exists",
-    effect: "NoSchedule",
-  }],
+  toleratesMaster:: [
+    {
+      key: "node-role.kubernetes.io/master",
+      operator: "Exists",
+      effect: "NoSchedule",
+    },
+    {
+      key: "node-role.kubernetes.io/control-plane",
+      operator: "Exists",
+      effect: "NoSchedule",
+    },
+  ],
 
   CriticalPodSpec:: {
     spec+: {
@@ -47,6 +54,10 @@ local kube = import "kube.libsonnet";
   isalpha(c):: std.codepoint(c) >= std.codepoint("a") &&
     std.codepoint(c) <= std.codepoint("z"),
 
+  toKindName(list): std.foldl(
+    function(accum, item) accum + {[std.asciiLower(item.kind)]+: {[item.metadata.name]: item}},
+    list, {}),
+
   Webhook(name, path): $.Ingress(name) + $.IngressTls {
     local this = self,
     host: "webhooks.oldmacdonald.farm",
@@ -58,6 +69,7 @@ local kube = import "kube.libsonnet";
     metadata+: {
       annotations+: {
         "kubernetes.io/ingress.class": "nginx",
+        "external-dns.alpha.kubernetes.io/target": "webhooks.oldmacdonald.farm",
       },
     },
     spec+: {
@@ -78,10 +90,7 @@ local kube = import "kube.libsonnet";
     local this = self,
     metadata+: {
       annotations+: {
-        "kubernetes.io/tls-acme": "true",
-        "kubernetes.io/ingress.class": "nginx",
         "cert-manager.io/cluster-issuer": "letsencrypt-prod",
-        "external-dns.alpha.kubernetes.io/target": "webhooks.oldmacdonald.farm",
       },
     },
     spec+: {
