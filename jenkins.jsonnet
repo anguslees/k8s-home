@@ -3,7 +3,7 @@ local utils = import "utils.libsonnet";
 
 // aka lts-alpine
 // renovate: depName=jenkins/jenkins
-local version = "2.204.2-alpine";
+local version = "2.289.2-alpine";
 // renovate: depName=jenkins/jnlp-slave
 local jnlp_version = "3.40-1-alpine";
 
