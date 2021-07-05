@@ -1,7 +1,8 @@
 local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 
-local version = "v0.9.3";
+// renovate: depName=metallb/controller
+local version = "v0.10.2";
 
 {
   namespace:: {metadata+: {namespace: "metallb"}},
@@ -27,7 +28,7 @@ local version = "v0.9.3";
       {
         apiGroups: [""],
         resources: ["services"],
-        verbs: ["get", "list", "watch", "update"],
+        verbs: ["get", "list", "watch"],
       },
       {
         apiGroups: [""],
@@ -37,7 +38,13 @@ local version = "v0.9.3";
       {
         apiGroups: [""],
         resources: ["events"],
-        verbs: ["create"],
+        verbs: ["create", "patch"],
+      },
+      {
+        apiGroups: ["policy"],
+        resourceNames: ["controller"],
+        resources: ["podsecuritypolicies"],
+        verbs: ["use"],
       },
     ],
   },
@@ -55,9 +62,20 @@ local version = "v0.9.3";
         verbs: ["get", "list", "watch"],
       },
       {
+        apiGroups: ["discovery.k8s.io"],
+        resources: ["endpointslices"],
+        verbs: ["get", "list", "watch"],
+      },
+      {
         apiGroups: [""],
         resources: ["events"],
         verbs: ["create", "patch"],
+      },
+      {
+        apiGroups: ["policy"],
+        resourceNames: ["speaker"],
+        resources: ["podsecuritypolicies"],
+        verbs: ["use"],
       },
     ],
   },
@@ -85,13 +103,41 @@ local version = "v0.9.3";
   controller: {
     sa: kube.ServiceAccount("controller") + $.namespace,
 
+    role: kube.Role("controller") + $.namespace {
+      rules: [
+        {
+          apiGroups: [""],
+          resources: ["secrets"],
+          verbs: ["create"],
+        },
+        {
+          apiGroups: [""],
+          resources: ["secrets"],
+          resourceNames: ["memberlist"],
+          verbs: ["list"],
+        },
+        {
+          apiGroups: ["apps"],
+          resources: ["deployments"],
+          resourceNames: [$.controller.deploy.metadata.name],
+          verbs: ["get"],
+        },
+      ],
+    },
+
+    roleBinding: kube.RoleBinding("controller") + $.namespace {
+      roleRef_: $.controller.role,
+      subjects_+: [$.controller.sa],
+    },
+
     deploy: kube.Deployment("controller") + $.namespace {
+      local this = self,
       spec+: {
         template+: {
           metadata+: {
             annotations+: {
               "prometheus.io/scrape": "true",
-            "prometheus.io/port": "7472",
+              "prometheus.io/port": "7472",
             },
           },
           spec+: {
@@ -106,6 +152,10 @@ local version = "v0.9.3";
                 image: "metallb/controller:" + version,
                 args_+: {
                   port: "7472",
+                },
+                env_+: {
+                  METALLB_ML_SECRET_NAME: "memberlist",
+                  METALLB_DEPLOYMENT: this.metadata.name,
                 },
                 ports_+: {
                   monitoring: {containerPort: 7472},
@@ -131,6 +181,21 @@ local version = "v0.9.3";
 
   speaker: {
     sa: kube.ServiceAccount("speaker") + $.namespace,
+
+    role: kube.Role("speaker") + $.namespace {
+      rules: [
+        {
+          apiGroups: [""],
+          resources: ["pods"],
+          verbs: ["list"],
+        },
+      ],
+    },
+
+    roleBinding: kube.RoleBinding("speaker") + $.namespace {
+      roleRef_: $.speaker.role,
+      subjects_+: [$.speaker.sa],
+    },
 
     deploy: kube.Deployment("speaker") + $.namespace {
       local this = self,
