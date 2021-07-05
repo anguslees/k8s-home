@@ -6,8 +6,6 @@ local utils = import "utils.libsonnet";
     metadata+: {namespace: "ipfs"},
   },
 
-  ipfsSvc:: error "need an ipfs service",
-
   svc: kube.Service("registry") + $.namespace {
     target_pod: $.registry.spec.template,
     spec+: {
@@ -28,16 +26,19 @@ local utils = import "utils.libsonnet";
           nodeSelector+: utils.archSelector("amd64"),
 	  containers_+: {
 	    registry: kube.Container("registry") {
-	      image: "jvassev/ipfs-registry:0.0.4",
-	      env_+: {
-		IPFS_GATEWAY: $.ipfsSvc.http_url,
-	      },
+              image: "anguslees/ipdr:latest", // renovate
+              command: ["ipdr", "server"],
+              args_+: {
+                // Unsupported - despite docs
+                //"ipfs-gateway": "http://api.ipfs:5001/",
+              },
 	      ports_+: {
 		registry: {containerPort: 5000, protocol: "TCP"},
 	      },
               readinessProbe: {
-                httpGet: {path: "/", port: 5000},
+                httpGet: {path: "/health", port: 5000},
               },
+              livenessProbe: self.readinessProbe,
 	    },
 	  },
 	},
