@@ -1,0 +1,20 @@
+{
+  "extends": [
+    "config:base",
+    "docker:pinDigests",
+    "group:recommended",
+    "group:allNonMajor",
+    "schedule:weekly"
+  ],
+  "regexManagers": [
+    {
+      "description": "Update docker version variables in jsonnet",
+      "fileMatch": ["\\.(jsonnet|libsonnet)$"],
+      "matchStrings": [
+        "// renovate: depName=(?<depName>.+?)(?: lookupName=(?<lookupName>.+?))?(?: datasource=(?<datasource>{a-z-]+?))?(?: versioning=(?<versioning>[a-z-]+?))?\\slocal .+? = \"(?<currentValue>.+?)\";\\s"
+      ],
+      "datasourceTemplate": "{{#if datasource}}{{datasource}}{{else}}docker{{/if}}",
+      "versioningTemplate": "{{#if versioning}}{{versioning}}{{else}}docker{{/if}}"
+    }
+  ]
+}

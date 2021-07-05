@@ -2,7 +2,10 @@ local kube = import "kube.libsonnet";
 local utils = import "utils.libsonnet";
 
 // aka lts-alpine
-local version = "2.176.2-alpine";
+// renovate: depName=jenkins/jenkins
+local version = "2.204.2-alpine";
+// renovate: depName=jenkins/jnlp-slave
+local jnlp_version = "3.40-1-alpine";
 
 {
   namespace:: {metadata+: {namespace: "jenkins"}},
@@ -80,7 +83,7 @@ local version = "2.176.2-alpine";
              ["containers",
               ["org.csanchez.jenkins.plugins.kubernetes.ContainerTemplate",
                ["name", "jnlp"],
-               ["image", "jenkins/jnlp-slave:3.27-1-alpine"],
+               ["image", "jenkins/jnlp-slave:" + jnlp_version],
                ["privileged", std.toString(false)],
                ["workingDir", "/home/jenkins"],
                ["command"],

@@ -14,7 +14,10 @@ local certman = import "cert-manager.jsonnet";
 // 1. apiserver first
 // 2. rest of control plane
 // 3. kubelets (see coreos-pxe-install.jsonnet:coreos_kubelet_tag)
+
+// renovate: depName=k8s.gcr.io/kube-proxy
 local version = "v1.21.2";
+// renovate: depName=k8s.gcr.io/kube-apiserver
 local apiserverVersion = "v1.21.2";
 
 local externalHostname = "kube.lan";

@@ -2,8 +2,10 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
+// renovate: depName=kubernetes/kubernetes datasource=github-releases versioning=semver
 local kubelet_tag = "v1.21.2";
 // sha512 for linux/amd64 'node binaries' tarball
+// TODO: renovate doesn't support this yet.  Remove/fix/something.
 local kubelet_sha512 = "589c62ccdeeddc023b3a3cd8127b87ca532ab4ff481f74c876863ba89429e2dc537664d036f98fd188b63bc121fc4e08a4a35fb13c150517a27f2c35b677560e";
 
 local default_env = {
