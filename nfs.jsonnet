@@ -6,7 +6,9 @@ local nfs_path = "/home/kube";
 
 // FIXME: add nfs client modules to arm image
 local arch = "amd64";
-local provisioner_image = "quay.io/external_storage/nfs-client-provisioner%s:v2.0.1" % (if arch == "amd64" then "" else "-"+arch);
+// renovate: depName=quay.io/external_storage/nfs-client-provisioner
+local version = "v2.0.1";
+local provisioner_image = "quay.io/external_storage/nfs-client-provisioner%s:%s" % [(if arch == "amd64" then "" else "-"+arch), version];
 
 // Example use:
 // kube.PersistentVolumeClaim("myclaim") {

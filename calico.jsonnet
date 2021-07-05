@@ -4,6 +4,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
+// renovate: depName=calico/kube-controllers
 local version = "v3.18.1";
 
 local mtu = 1440;

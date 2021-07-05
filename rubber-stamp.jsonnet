@@ -53,7 +53,9 @@ local arch = "amd64";
           nodeSelector+: utils.archSelector(arch),
           containers_+: {
             stamp: kube.Container("kubelet-rubber-stamp") {
-              image: "quay.io/kontena/kubelet-rubber-stamp-%s:0.3.1" % arch,
+              // renovate: depName=quay.io/kontena/kubelet-rubber-stamp-amd64
+              local version = "0.3.1",
+              image: "quay.io/kontena/kubelet-rubber-stamp-%s:%s" % [arch, version],
               args_: {
                 v: 2,
               },

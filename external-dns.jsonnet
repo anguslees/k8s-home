@@ -144,7 +144,7 @@ local utils = import "utils.libsonnet";
           },
           containers_+: {
             default: kube.Container("dyndns") {
-              image: "tunix/digitalocean-dyndns",
+              image: "tunix/digitalocean-dyndns", // renovate
               env_+: {
                 DIGITALOCEAN_TOKEN: kube.SecretKeyRef($.secret, "token"),
                 DOMAIN: "oldmacdonald.farm",
@@ -170,7 +170,7 @@ local utils = import "utils.libsonnet";
           },
           containers_+: {
             default: kube.Container("extdns") {
-              image: "registry.opensource.zalan.do/teapot/external-dns:v0.5.17",
+              image: "registry.opensource.zalan.do/teapot/external-dns:v0.5.17", // renovate
               args_+: {
                 sources_:: ["ingress", "service"],
                 "domain-filter": "oldmacdonald.farm",

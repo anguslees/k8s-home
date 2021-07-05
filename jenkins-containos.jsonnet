@@ -33,7 +33,7 @@ local jenkins = import "jenkins.jsonnet";
               },
               containers_+: {
                 update: utils.shcmd("update") {
-                  image: "alpine/git:1.0.4",
+                  image: "alpine/git:1.0.4", // renovate
                   volumeMounts_+: {
                     scratch: {mountPath: "/scratch"},
                   },
@@ -80,7 +80,7 @@ local jenkins = import "jenkins.jsonnet";
               containers_+: {
                 update: utils.shcmd("update") {
                   // Need gnu find
-                  image: "debian:jessie-slim",
+                  image: "debian:jessie-slim", // renovate
                   volumeMounts_+: {
                     scratch: {mountPath: "/scratch"},
                   },

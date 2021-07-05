@@ -7,6 +7,7 @@ local stripLeading(c, str) = if std.startsWith(str, c) then
 
 local isalpha(c) = std.codepoint(c) >= std.codepoint("a") && std.codepoint(c) <= std.codepoint("z");
 
+// renovate: depName=quay.io/kinvolk/flatcar-linux-update-operator
 local version = "v0.7.3";
 
 local arch = "amd64";

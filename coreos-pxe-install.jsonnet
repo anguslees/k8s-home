@@ -638,7 +638,7 @@ local filekey(path) = (
           tolerations+: utils.toleratesMaster,
           containers_+: {
             httpd: kube.Container("httpd") {
-              image: "httpd:2.4.33-alpine",
+              image: "httpd:2.4.33-alpine", // renovate
               ports_+: {
                 http: { containerPort: 80 },
               },
@@ -678,7 +678,9 @@ local filekey(path) = (
               // don't really want to burn a NodePort on it.
               local tftpserver = "$(POD_IP)",
 
-              image: "k8s.gcr.io/kube-dnsmasq-%s:1.4" % arch,
+              // renovate: depName=k8s.gcr.io/kube-dnsmasq-amd64
+              local version = "1.4",
+              image: "k8s.gcr.io/kube-dnsmasq-%s:%s" % [arch, version],
               args: [
                 "--log-facility=-", // stderr
                 "--log-dhcp",

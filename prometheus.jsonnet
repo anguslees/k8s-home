@@ -209,7 +209,7 @@ local path_join(prefix, suffix) = (
             containers_+: {
               default: kube.Container("prometheus") {
                 local this = self,
-                image: "quay.io/prometheus/prometheus:v2.14.0",
+                image: "quay.io/prometheus/prometheus:v2.14.0", // renovate
                 args_+: {
                   //"log.level": "debug",  // default is info
 
@@ -263,7 +263,7 @@ local path_join(prefix, suffix) = (
                 },
               },
               config_reload: kube.Container("configmap-reload") {
-                image: "jimmidyson/configmap-reload:v0.1",
+                image: "jimmidyson/configmap-reload:v0.1", // renovate
                 args_+: {
                   "volume-dir": "/config",
                   "webhook-url": "http://localhost:9090/-/reload",
@@ -341,7 +341,7 @@ local path_join(prefix, suffix) = (
             },
             containers_+: {
               default: kube.Container("alertmanager") {
-                image: "quay.io/prometheus/alertmanager:v0.20.0",
+                image: "quay.io/prometheus/alertmanager:v0.20.0", // renovate
                 args_+: {
                   "config.file": "/etc/alertmanager/config.yml",
                   "storage.path": "/alertmanager",
@@ -382,7 +382,7 @@ local path_join(prefix, suffix) = (
                 },
               },
               config_reload: kube.Container("configmap-reload") {
-                image: "jimmidyson/configmap-reload:v0.1",
+                image: "jimmidyson/configmap-reload:v0.1", // renovate
                 args_+: {
                   "volume-dir": "/config",
                   "webhook-url": "http://localhost:9093/alertmanager/-/reload",
@@ -424,7 +424,7 @@ local path_join(prefix, suffix) = (
             tolerations: utils.toleratesMaster,
             containers_+: {
               default: kube.Container("node-exporter") {
-                image: "quay.io/prometheus/node-exporter:v0.18.1",  // fixme: +this.arch
+                image: "quay.io/prometheus/node-exporter:v0.18.1", // renovate
                 local v = self.volumeMounts_,
                 args_+: {
                   "path.procfs": v.procfs.mountPath,
@@ -527,7 +527,7 @@ local path_join(prefix, suffix) = (
             nodeSelector: utils.archSelector("amd64"),
             containers_+: {
               default+: kube.Container("ksm") {
-                image: "quay.io/coreos/kube-state-metrics:v1.8.0",
+                image: "quay.io/coreos/kube-state-metrics:v1.8.0", // renovate
                 ports_: {
                   metrics: {containerPort: 8080},
                 },
@@ -551,7 +551,7 @@ local path_join(prefix, suffix) = (
                 },
               },
               resizer: kube.Container("addon-resizer") {
-                image: "k8s.gcr.io/addon-resizer:2.1",
+                image: "k8s.gcr.io/addon-resizer:2.1", // renovate
                 command: ["/pod_nanny"],
                 args_+: {
                   container: spec.containers[0].name,

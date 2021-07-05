@@ -51,7 +51,7 @@ local metallb = (import "all.jsonnet").metallb;
           terminationGracePeriodSeconds: 60,
           containers_+: {
             default: kube.Container("default-http-backend") {
-              image: "k8s.gcr.io/defaultbackend:1.4",
+              image: "k8s.gcr.io/defaultbackend:1.4", // renovate
               livenessProbe: {
                 httpGet: { path: "/healthz", port: 8080, scheme: "HTTP" },
                 initialDelaySeconds: 30,
@@ -209,7 +209,7 @@ local metallb = (import "all.jsonnet").metallb;
           },
           containers_+: {
             default: kube.Container("nginx") {
-              image: "quay.io/kubernetes-ingress-controller/nginx-ingress-controller:0.19.0",
+              image: "quay.io/kubernetes-ingress-controller/nginx-ingress-controller:0.19.0", // renovate
               env_+: {
                 POD_NAME: kube.FieldRef("metadata.name"),
                 POD_NAMESPACE: kube.FieldRef("metadata.namespace"),

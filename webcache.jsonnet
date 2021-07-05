@@ -65,7 +65,7 @@ local utils = import "utils.libsonnet";
           default_container: "squid",
           containers_+: {
             squid: kube.Container("squid") {
-              image: "sameersbn/squid:3.5.27",
+              image: "sameersbn/squid:3.5.27", // renovate
               ports_+: {
                 proxy: {containerPort: 3128},
               },
@@ -87,7 +87,7 @@ local utils = import "utils.libsonnet";
               },
             },
             metrics: kube.Container("squid-exporter") {
-              image: "boynux/squid-exporter:v1.4",
+              image: "boynux/squid-exporter:v1.4", // renovate
               args_+: {
                 listen: ":9301",
               },

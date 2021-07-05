@@ -73,7 +73,7 @@ local utils = import "utils.libsonnet";
 
           containers_+: {
             runner: kube.Container("runner") {
-              image: "gitlab/gitlab-runner:alpine-v10.8.0",
+              image: "gitlab/gitlab-runner:alpine-v10.8.0", // renovate
               command: ["/bin/sh", "-x", "-e", "-c",
                         |||
                           mkdir /home/gitlab-runner/.gitlab-runner/

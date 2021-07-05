@@ -232,7 +232,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               etcd: kube.Container("etcd") {
-                image: "gcr.io/etcd-development/etcd:v3.5.0",
+                image: "gcr.io/etcd-development/etcd:v3.5.0", // renovate
                 securityContext+: {
                   allowPrivilegeEscalation: false,
                 },
@@ -1023,7 +1023,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               checkpointer: kube.Container("checkpointer") {
-                image: "registry.gitlab.com/anguslees/docker-bootkube-checkpoint:v0-14-0",
+                image: "registry.gitlab.com/anguslees/docker-bootkube-checkpoint:v0-14-0", // renovate
                 command: ["checkpoint"],
                 args_+: {
                   "lock-file": "/var/run/lock/pod-checkpointer.lock",
@@ -1152,7 +1152,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               coredns: kube.Container("coredns") {
-                image: "k8s.gcr.io/coredns:1.6.2",
+                image: "k8s.gcr.io/coredns:1.6.2", // renovate
                 resources+: {
                   limits: {memory: "170Mi"},
                   requests: {cpu: "50m", memory: "30Mi"},
@@ -1285,7 +1285,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               default: kube.Container("metrics-server") {
-                image: "k8s.gcr.io/metrics-server/metrics-server:v0.5.0",
+                image: "k8s.gcr.io/metrics-server/metrics-server:v0.5.0", // renovate
                 command: ["/metrics-server"],
                 args_+: {
                   "logtostderr": "true",

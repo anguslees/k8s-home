@@ -63,7 +63,7 @@ local port = 8099;
           },
           containers_+: {
             default: kube.Container("server") {
-              image: "anguslees/docker-googlehomekodi",
+              image: "anguslees/docker-googlehomekodi", // renovate
               workingDir: "/app/GoogleHomeKodi",
               ports_+: {
                 default: {containerPort: port, protocol: "TCP"},

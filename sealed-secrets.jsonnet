@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local utils = import "utils.libsonnet";
 
 local arch = "amd64";
-local image = "quay.io/bitnami/sealed-secrets-controller:v0.5.1";
+local image = "quay.io/bitnami/sealed-secrets-controller:v0.5.1"; // renovate
 
 {
   namespace:: {metadata+: {namespace: "kube-system"}},

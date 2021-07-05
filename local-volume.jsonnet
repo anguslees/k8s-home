@@ -80,7 +80,7 @@ local kubecfg = import "kubecfg.libsonnet";
             serviceAccount: $.provisioner.serviceAccount.metadata.name,
             containers_+: {
               default: kube.Container("provisioner") {
-                image: "quay.io/external_storage/local-volume-provisioner:v1.0.1",
+                image: "quay.io/external_storage/local-volume-provisioner:v1.0.1", // renovate
                 securityContext: {privileged: true},
                 volumeMounts_+: {
                   discovery: {mountPath: "/local-disks"},

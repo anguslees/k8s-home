@@ -80,7 +80,9 @@ local arch = "arm";
           containers_: {
             kured: kube.Container("kured") {
               //image: "quay.io/weaveworks/kured",
-              image: "quay.io/anguslees/kured-%s:1.0-20180606-2" % arch,
+              // renovate: depName=quay.io/anguslees/kured-amd64
+              local version = "1.0-20180606-2",
+              image: "quay.io/anguslees/kured-%s:%s" % [arch, version],
               command: ["/usr/bin/kured"],
               args_+: {
                 "alert-filter-regexp": "^RebootRequired$",
