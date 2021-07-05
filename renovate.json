@@ -23,8 +23,8 @@
         "image: ['\"](?<depName>.+?):(?<currentValue>.+?)['\"], // renovate",
         "local +.? = ['\"](?<depName>.+?):(?<currentValue>.+?)['\"][,;] // renovate"
       ],
-      "datasource": "docker",
-      "versioning": "docker"
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
     }
   ]
 }
