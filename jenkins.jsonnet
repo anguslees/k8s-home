@@ -5,7 +5,7 @@ local utils = import "utils.libsonnet";
 // renovate: depName=jenkins/jenkins
 local version = "2.204.2-alpine";
 // renovate: depName=jenkins/jnlp-slave
-local jnlp_version = "3.40-1-alpine";
+local jnlp_version = "4.9-1-alpine";
 
 {
   namespace:: {metadata+: {namespace: "jenkins"}},
