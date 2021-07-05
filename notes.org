@@ -17,6 +17,8 @@ TODO:
   https://github.com/kubernetes-incubator/bootkube/blob/master/pkg/asset/internal/templates.go
 - make an easy self-host installer by generating fake initial checkpoints
 - test/document/profit/etc
+- enable CONFIG_KSM on containos
+- enable hugetlb (and hugetlbfs, etc) on containos
 
 ** Install
 
