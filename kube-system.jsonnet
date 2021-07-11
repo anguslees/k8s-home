@@ -127,6 +127,14 @@ local CA(name, namespace, issuer) = {
   etcd: {
     ca: CA("kube-etcd-ca", $.namespace.metadata.namespace, $.selfSigner),
 
+    // kubeadm uses /etc/kubernetes/pki/etcd-ca.crt
+    ca_bundle: kube.Secret("kube-etcd-ca-bundle") + $.namespace {
+      data_: {
+        "ca.crt": importstr "pki/etcd-ca.pem",
+      },
+    },
+
+
     serverCert: Certificate("etcd-server", self.ca.issuer) + $.namespace {
       spec+: {
         usages_+: ["server auth"],
@@ -202,7 +210,7 @@ local CA(name, namespace, issuer) = {
             },
             volumes_: {
               data: kube.HostPathVolume("/var/lib/etcd", "DirectoryOrCreate"),
-              etcd_ca: kube.SecretVolume($.secrets.etcd_ca), // TODO: migration-only
+              etcd_ca: kube.SecretVolume($.etcd.ca_bundle),
               etcd_server: kube.SecretVolume($.etcd.serverCert.secret_),
               etcd_peer: kube.SecretVolume($.etcd.peerCert.secret_),
               etcd_client: kube.SecretVolume($.etcd.monitorCert.secret_),
@@ -386,7 +394,7 @@ local CA(name, namespace, issuer) = {
     // Public CA bundle (ca.crt - possibly contains multiple certificates)
     // Same as /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
     // kubeadm (incorrectly) uses /etc/kubernetes/pki/ca.crt
-    ca_bundle: utils.HashedSecret("kube-ca-bundle") + $.namespace {
+    ca_bundle: kube.Secret("kube-ca-bundle") + $.namespace {
       data_: {
         "ca.crt": importstr "pki/ca.crt",
       },
@@ -395,14 +403,6 @@ local CA(name, namespace, issuer) = {
     // Private CA key and matching (single) certificate
     // kubeadm uses /etc/kubernetes/pki/ca.{crt,key}
     ca: CA("kube-ca", $.namespace.metadata.namespace, $.selfSigner),
-    // TODO: remove
-    ca_old: utils.HashedSecret("kube-ca") + $.namespace {
-      type: tlsType,
-      data_: {
-        "tls.crt": importstr "pki/ca-primary.crt",
-        "tls.key": importstr "pki/ca.key",
-      },
-    },
 
     kubernetes_admin: Certificate("kubernetes-admin", $.secrets.ca.issuer) + $.namespace {
       spec+: {
@@ -412,31 +412,20 @@ local CA(name, namespace, issuer) = {
       },
     },
 
-    // kubeadm uses /etc/kubernetes/pki/etcd-ca.crt
-    // TODO: remove after migration
-    etcd_ca: utils.HashedSecret("kube-etcd-ca") + $.namespace {
-      data_: {
-        "ca.crt": importstr "pki/etcd-ca.pem",
-      },
-    },
-
     // kubeadm uses /etc/kubernetes/pki/apiserver.{crt,key}
-    apiserver: kube.Secret("kube-apiserver") + $.namespace {
-      type: tlsType,
-      data_: {
-        "tls.crt": importstr "pki/apiserver.crt",
-        "tls.key": importstr "pki/apiserver.key",
-        "ca.crt": importstr "pki/ca.crt",
+    apiserver: Certificate("kube-apiserver", $.secrets.ca.issuer) + $.namespace {
+      spec+: {
+        usages_+: ["server auth"],
+        ipAddresses_+: ["127.0.0.1", "10.96.0.1"],
+        dnsNames_+: ["kube.lan", "kubernetes", "kubernetes.default", "kubernetes.default.svc", "kubernetes.default.svc.cluster", "kubernetes.default.svc.cluster.local"],
       },
     },
 
     // kubeadm uses /etc/kubernetes/pki/apiserver-kubelet-client.{crt,key}
-    apiserver_kubelet_client: kube.Secret("kube-apiserver-kubelet-client") + $.namespace {
-      type: tlsType,
-      data_: {
-        "tls.crt": importstr "pki/apiserver-kubelet-client.crt",
-        "tls.key": importstr "pki/apiserver-kubelet-client.key",
-        "ca.crt": importstr "pki/ca.crt",
+    apiserver_kubelet_client: Certificate("kube-apiserver-kubelet-client", $.secrets.ca.issuer) + $.namespace {
+      spec+: {
+        usages_+: ["client auth"],
+        organization: ["system:masters"],
       },
     },
 
@@ -584,12 +573,13 @@ local CA(name, namespace, issuer) = {
             automountServiceAccountToken: false,
             tolerations+: bootstrapTolerations,
             volumes_+: {
-              kubelet_client: kube.SecretVolume($.secrets.apiserver_kubelet_client),
+              kubelet_client: kube.SecretVolume($.secrets.apiserver_kubelet_client.secret_),
               sa: kube.SecretVolume($.secrets.service_account),
               ca_bundle: kube.SecretVolume($.secrets.ca_bundle),
               fpc: kube.SecretVolume($.secrets.front_proxy_client.secret_),
-              tls: kube.SecretVolume($.secrets.apiserver),
+              tls: kube.SecretVolume($.secrets.apiserver.secret_),
               etcd_client: kube.SecretVolume($.apiserver.etcdClientCert.secret_),
+              etcd_ca_bundle: kube.SecretVolume($.etcd.ca_bundle),
 
               cacerts: kube.HostPathVolume("/etc/ssl/certs", "DirectoryOrCreate"),
             },
@@ -647,7 +637,7 @@ local CA(name, namespace, issuer) = {
                   "proxy-client-key-file": "/keys/front-proxy-client/tls.key",
                   "tls-cert-file": "/keys/apiserver/tls.crt",
                   "tls-private-key-file": "/keys/apiserver/tls.key",
-                  "etcd-cafile": "/keys/etcd-apiserver-client/ca.crt",
+                  "etcd-cafile": "/keys/etcd-ca/ca.crt",
                   "etcd-certfile": "/keys/etcd-apiserver-client/tls.crt",
                   "etcd-keyfile": "/keys/etcd-apiserver-client/tls.key",
 
@@ -695,6 +685,7 @@ local CA(name, namespace, issuer) = {
                   ca_bundle: {mountPath: "/keys/ca-bundle", readOnly: true},
                   fpc: {mountPath: "/keys/front-proxy-client", readOnly: true},
                   tls: {mountPath: "/keys/apiserver", readOnly: true},
+                  etcd_ca_bundle: {mountPath: "/keys/etcd-ca", readOnly: true},
                   etcd_client: {mountPath: "/keys/etcd-apiserver-client", readOnly: true},
                   cacerts: {mountPath: "/etc/ssl/certs", readOnly: true},
                 },
@@ -803,7 +794,7 @@ local CA(name, namespace, issuer) = {
               varrunkubernetes: kube.EmptyDirVolume(),
               cacerts: kube.HostPathVolume("/etc/ssl/certs", "DirectoryOrCreate"),
               flexvolume: kube.HostPathVolume("/var/lib/kubelet/volumeplugins", "DirectoryOrCreate"),
-              ca: kube.SecretVolume($.secrets.ca_old),
+              ca: kube.SecretVolume($.secrets.ca.cert.secret_),
               ca_bundle: kube.SecretVolume($.secrets.ca_bundle),
               sa: kube.SecretVolume($.secrets.service_account),
             },
@@ -839,6 +830,7 @@ local CA(name, namespace, issuer) = {
                   "root-ca-file": "/keys/ca_bundle/ca.crt",
                   "service-account-private-key-file": "/keys/sa/key.key",
                   // cluster-signing-cert-file must be a single key, unlike --root-ca-file
+                  // TODO: should use an intermediate CA for this, to reduce CA key exposure
                   "cluster-signing-cert-file": "/keys/ca/tls.crt",
                   "cluster-signing-key-file": "/keys/ca/tls.key",
                 },
