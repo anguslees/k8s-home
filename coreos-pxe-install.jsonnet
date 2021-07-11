@@ -2,6 +2,10 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
+// NB: To rolling-reboot all the nodes:  (I think it needs label _and_ annotation??)
+//   kubectl annotate nodes -l flatcar-linux-update.v1.flatcar-linux.net/id flatcar-linux-update.v1.flatcar-linux.net/reboot-needed=true
+//   kubectl label nodes -l flatcar-linux-update.v1.flatcar-linux.net/id flatcar-linux-update.v1.flatcar-linux.net/reboot-needed=true
+
 // renovate: depName=kubernetes/kubernetes datasource=github-releases versioning=semver
 local kubelet_tag = "v1.21.2";
 // sha512 for linux/amd64 'node binaries' tarball
@@ -146,7 +150,7 @@ local filekey(path) = (
                 args_:: {
                   //v: 3,
                   "anonymous-auth": false,
-                  "client-ca-file": "/etc/kubernetes/pki/ca.crt",
+                  "client-ca-file": "/var/lib/kubelet/pki/kube-ca/ca.crt",
                   "authentication-token-webhook": true,
                   "authorization-mode": "Webhook",
                   "cluster-dns": "10.96.0.10",
@@ -331,6 +335,34 @@ local filekey(path) = (
           "storage-driver": "overlay2",
           "log-driver": "json-file",
           "log-opts": {"max-size": "100m"},
+        })),
+      file("/etc/kubernetes/kubelet.conf",
+        kubecfg.manifestYaml({
+          apiVersion: "v1",
+          kind: "Config",
+          clusters: [{
+            name: "default-cluster",
+            cluster: {
+              "certificate-authority": "/var/lib/kubelet/pki/kube-ca/ca.crt",
+              server: "https://kube.lan:6443",
+            },
+          }],
+          users: [{
+            name: "default-auth",
+            user: {
+              "client-certificate": "/var/lib/kubelet/pki/kubelet-client-current.pem",
+              "client-key": "/var/lib/kubelet/pki/kubelet-client-current.pem",
+            },
+          }],
+          contexts: [{
+            name: "default-context",
+            context: {
+              cluster: "default-cluster",
+              namespace: "default",
+              user: "default-auth",
+            },
+          }],
+          "current-context": "default-context",
         })),
       file("/etc/containerd/config.toml",
         utils.manifestToml({
