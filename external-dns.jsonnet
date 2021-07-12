@@ -106,7 +106,7 @@ local utils = import "utils.libsonnet";
     rules: [
       {
         apiGroups: [""],
-        resources: ["services", "pods", "nodes"],
+        resources: ["services", "pods", "nodes", "endpoints"],
         verbs: ["get", "watch", "list"],
       },
       {
@@ -170,7 +170,7 @@ local utils = import "utils.libsonnet";
           },
           containers_+: {
             default: kube.Container("extdns") {
-              image: "registry.opensource.zalan.do/teapot/external-dns:v0.5.17", // renovate
+              image: "k8s.gcr.io/external-dns/external-dns:v0.8.0", // renovate
               args_+: {
                 sources_:: ["ingress", "service"],
                 "domain-filter": "oldmacdonald.farm",
@@ -190,7 +190,10 @@ local utils = import "utils.libsonnet";
               readinessProbe: {
                 httpGet: {path: "/healthz", port: "metrics"},
               },
-              livenessProbe: self.readinessProbe,
+              livenessProbe: self.readinessProbe {
+                timeoutSeconds: 10,
+                failureThreshold: 3,
+              },
             },
           },
         },
