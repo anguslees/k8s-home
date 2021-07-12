@@ -209,7 +209,7 @@ local path_join(prefix, suffix) = (
             containers_+: {
               default: kube.Container("prometheus") {
                 local this = self,
-                image: "quay.io/prometheus/prometheus:v2.14.0", // renovate
+                image: "quay.io/prometheus/prometheus:v2.28.1", // renovate
                 args_+: {
                   //"log.level": "debug",  // default is info
 
@@ -341,7 +341,7 @@ local path_join(prefix, suffix) = (
             },
             containers_+: {
               default: kube.Container("alertmanager") {
-                image: "quay.io/prometheus/alertmanager:v0.20.0", // renovate
+                image: "quay.io/prometheus/alertmanager:v0.22.2", // renovate
                 args_+: {
                   "config.file": "/etc/alertmanager/config.yml",
                   "storage.path": "/alertmanager",
@@ -527,7 +527,7 @@ local path_join(prefix, suffix) = (
             nodeSelector: utils.archSelector("amd64"),
             containers_+: {
               default+: kube.Container("ksm") {
-                image: "quay.io/coreos/kube-state-metrics:v1.8.0", // renovate
+                image: "quay.io/coreos/kube-state-metrics:v1.9.8", // renovate
                 ports_: {
                   metrics: {containerPort: 8080},
                 },
@@ -551,7 +551,7 @@ local path_join(prefix, suffix) = (
                 },
               },
               resizer: kube.Container("addon-resizer") {
-                image: "k8s.gcr.io/addon-resizer:2.1", // renovate
+                image: "k8s.gcr.io/addon-resizer:2.3", // renovate
                 command: ["/pod_nanny"],
                 args_+: {
                   container: spec.containers[0].name,
