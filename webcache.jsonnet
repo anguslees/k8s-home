@@ -87,7 +87,7 @@ local utils = import "utils.libsonnet";
               },
             },
             metrics: kube.Container("squid-exporter") {
-              image: "boynux/squid-exporter:v1.4", // renovate
+              image: "boynux/squid-exporter:v1.9", // renovate
               args_+: {
                 listen: ":9301",
               },

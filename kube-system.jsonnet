@@ -1144,7 +1144,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               coredns: kube.Container("coredns") {
-                image: "k8s.gcr.io/coredns:1.6.2", // renovate
+                image: "k8s.gcr.io/coredns:1.7.0", // renovate
                 resources+: {
                   limits: {memory: "170Mi"},
                   requests: {cpu: "50m", memory: "30Mi"},
