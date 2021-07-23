@@ -4183,7 +4183,7 @@ local ValidatingWebhookConfiguration(name) = kube._Object("admissionregistration
                     weight: 100,
                     podAffinityTerm: {
                       labelSelector: this.spec.selector,
-                      topologyKey: "failure-domain.beta.kubernetes.io/zone",
+                      topologyKey: "topology.kubernetes.io/zone",
                     },
                   },
                 ],

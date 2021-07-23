@@ -287,7 +287,7 @@ local cephVersion = "v14.2.6-20200115";
                 weight: 100,
                 podAffinityTerm: {
                   labelSelector: selector,
-                  topologyKey: "failure-domain.beta.kubernetes.io/zone",
+                  topologyKey: "topology.kubernetes.io/zone",
                 },
               },
             ],

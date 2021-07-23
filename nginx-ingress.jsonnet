@@ -201,7 +201,7 @@ local metallb = (import "all.jsonnet").metallb;
                   weight: 100,
                   podAffinityTerm: {
                     labelSelector: this.spec.selector,
-                    topologyKey: "failure-domain.beta.kubernetes.io/zone",
+                    topologyKey: "topology.kubernetes.io/zone",
                   },
                 },
               ],
