@@ -193,7 +193,10 @@ local path_join(prefix, suffix) = (
               config: kube.ConfigMapVolume(prom.config),
             },
             securityContext+: {
+              runAsUser: 65534,
+              runAsGroup: 65534,
               fsGroup: 65534, // nobody:nogroup
+              runAsNonRoot: true,
             },
             affinity+: {
               podAntiAffinity+: {
@@ -427,6 +430,7 @@ local path_join(prefix, suffix) = (
                 image: "quay.io/prometheus/node-exporter:v1.2.0", // renovate
                 local v = self.volumeMounts_,
                 args_+: {
+                  "path.rootfs": v.root.mountPath,
                   "path.procfs": v.procfs.mountPath,
                   "path.sysfs": v.sysfs.mountPath,
 
@@ -458,6 +462,13 @@ local path_join(prefix, suffix) = (
                 resources+: {
                   limits: {cpu: "100m", memory: "50Mi"},
                   requests: {cpu: "10m", memory: "25Mi"},
+                },
+                securityContext: {
+                  allowPrivilegeEscalation: false,
+                  capabilities: {
+                    add+: ["SYS_TIME"],
+                    drop+: ["all"],
+                  },
                 },
               },
             },
