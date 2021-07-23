@@ -415,23 +415,6 @@ local CA(name, namespace, issuer) = {
       },
     },
 
-    // kubeadm uses /etc/kubernetes/pki/apiserver.{crt,key}
-    apiserver: Certificate("kube-apiserver", $.secrets.ca.issuer) + $.namespace {
-      spec+: {
-        usages_+: ["server auth"],
-        ipAddresses_+: ["127.0.0.1", "10.96.0.1"],
-        dnsNames_+: ["kube.lan", "kubernetes", "kubernetes.default", "kubernetes.default.svc", "kubernetes.default.svc.cluster", "kubernetes.default.svc.cluster.local"],
-      },
-    },
-
-    // kubeadm uses /etc/kubernetes/pki/apiserver-kubelet-client.{crt,key}
-    apiserver_kubelet_client: Certificate("kube-apiserver-kubelet-client", $.secrets.ca.issuer) + $.namespace {
-      spec+: {
-        usages_+: ["client auth"],
-        organization: ["system:masters"],
-      },
-    },
-
     // kubeadm uses /etc/kubernetes/pki/sa.{pub,key}
     // TODO: auto-rotate this. (NB: 'public key' (not cert) is currently unsupported by cert-manager)
     service_account: kube.Secret("kube-service-account") + $.namespace {
@@ -543,6 +526,23 @@ local CA(name, namespace, issuer) = {
       },
     },
 
+    // kubeadm uses /etc/kubernetes/pki/apiserver.{crt,key}
+    servingCert: Certificate("kube-apiserver", $.secrets.ca.issuer) + $.namespace {
+      spec+: {
+        usages_+: ["server auth"],
+        ipAddresses_+: ["127.0.0.1", "10.96.0.1"],
+        dnsNames_+: ["kube.lan", "kubernetes", "kubernetes.default", "kubernetes.default.svc", "kubernetes.default.svc.cluster", "kubernetes.default.svc.cluster.local"],
+      },
+    },
+
+    // kubeadm uses /etc/kubernetes/pki/apiserver-kubelet-client.{crt,key}
+    kubeletClientCert: Certificate("kube-apiserver-kubelet-client", $.secrets.ca.issuer) + $.namespace {
+      spec+: {
+        usages_+: ["client auth"],
+        organization: ["system:masters"],
+      },
+    },
+
     pdb: kube.PodDisruptionBudget("apiserver") + $.namespace {
       target_pod: $.apiserver.deploy.spec.template,
       spec+: {minAvailable: 1},
@@ -576,11 +576,11 @@ local CA(name, namespace, issuer) = {
             automountServiceAccountToken: false,
             tolerations+: bootstrapTolerations,
             volumes_+: {
-              kubelet_client: kube.SecretVolume($.secrets.apiserver_kubelet_client.secret_),
+              kubelet_client: kube.SecretVolume($.apiserver.kubeletClientCert.secret_),
               sa: kube.SecretVolume($.secrets.service_account),
               ca_bundle: kube.SecretVolume($.secrets.ca_bundle),
               fpc: kube.SecretVolume($.secrets.front_proxy_client.secret_),
-              tls: kube.SecretVolume($.secrets.apiserver.secret_),
+              tls: kube.SecretVolume($.apiserver.servingCert.secret_),
               etcd_client: kube.SecretVolume($.apiserver.etcdClientCert.secret_),
               etcd_ca_bundle: kube.SecretVolume($.etcd.ca_bundle),
 
