@@ -1068,9 +1068,9 @@ local CA(name, namespace, issuer) = {
           verbs: ["list", "watch"],
         },
         {
-          apiGroups: [""],
-          resources: ["nodes"],
-          verbs: ["get"],
+          apiGroups: ["discovery.k8s.io"],
+          resources: ["endpointslices"],
+          verbs: ["list", "watch"],
         },
       ],
     },
@@ -1092,14 +1092,15 @@ local CA(name, namespace, issuer) = {
             health {
               lameduck 40s
             }
+            ready
             log
             kubernetes %(dnsDomain)s in-addr.arpa ip6.arpa {
-              pods insecure # FIXME
-              upstream
               fallthrough in-addr.arpa ip6.arpa
             }
             prometheus :9153
-            forward . /etc/resolv.conf
+            forward . /etc/resolv.conf {
+              max_concurrent 1000
+            }
             cache 30
             loop
             loadbalance
@@ -1151,7 +1152,6 @@ local CA(name, namespace, issuer) = {
                   items+: [{key: "Corefile", path: "Corefile"}],
                 },
               },
-              tmp: kube.EmptyDirVolume(),
             },
             containers_+: {
               coredns: kube.Container("coredns") {
@@ -1168,9 +1168,6 @@ local CA(name, namespace, issuer) = {
                 },
                 volumeMounts_+: {
                   config: {mountPath: "/etc/coredns", readOnly: true},
-                  // Workaround https://github.com/coredns/deployment/pull/138
-                  // Remove on coredns >=1.4.0
-                  tmp: {mountPath: "/tmp"},
                 },
                 ports_+: {
                   dns: {containerPort: 53, protocol: "UDP"},
@@ -1189,8 +1186,7 @@ local CA(name, namespace, issuer) = {
                   failureThreshold: std.ceil(300 / self.periodSeconds),
                 },
                 readinessProbe: self.livenessProbe {
-                  // TODO: enable "ready" plugin when released.
-                  //httpGet: {path: "/ready", port: 8181, scheme: "HTTP"},
+                  httpGet: {path: "/ready", port: 8181, scheme: "HTTP"},
                   successThreshold: 1,
                 },
                 securityContext: {
