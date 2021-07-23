@@ -72,6 +72,7 @@ local Certificate(name, issuer) = certman.Certificate(name) {
     isCA: false,
     usages_:: ["digital signature", "key encipherment"],
     usages: std.set(self.usages_),
+    organization: [],
     dnsNames_:: [],
     dnsNames: std.set(self.dnsNames_),
     ipAddresses_:: [],
@@ -288,8 +289,7 @@ local CA(name, namespace, issuer) = {
                 livenessProbe: {
                   // /health fails if endpoint is out of quorum, so don't use for liveness!
                   tcpSocket: {port: 2381},
-                  failureThreshold: 8,
-                  initialDelaySeconds: 180,
+                  failureThreshold: 5,
                   timeoutSeconds: 15,
                   periodSeconds: 30,
                 },
@@ -297,6 +297,9 @@ local CA(name, namespace, issuer) = {
                   httpGet: {path: "/health", port: 2381, scheme: "HTTP"},
                   tcpSocket: null,
                   failureThreshold: 3,
+                },
+                startupProbe: self.livenessProbe {
+                  failureThreshold: std.ceil(30 * 60 / self.periodSeconds),
                 },
                 volumeMounts_+: {
                   data: {mountPath: "/data"},
@@ -665,10 +668,12 @@ local CA(name, namespace, issuer) = {
                 livenessProbe: {
                   httpGet: {path: "/livez", port: 6443, scheme: "HTTPS"},
                   failureThreshold: 10,
-                  initialDelaySeconds: 300,
                   periodSeconds: 30,
                   successThreshold: 1,
                   timeoutSeconds: 20,
+                },
+                startupProbe: self.livenessProbe {
+                  failureThreshold: std.ceil(600 / self.periodSeconds),
                 },
                 readinessProbe: self.livenessProbe {
                   httpGet+: {path: "/readyz"},
@@ -839,8 +844,11 @@ local CA(name, namespace, issuer) = {
                 },
                 livenessProbe: {
                   httpGet: {path: "/healthz", port: 10252, scheme: "HTTP"},
-                  initialDelaySeconds: 180,
                   timeoutSeconds: 20,
+                  periodSeconds: 30,
+                },
+                startupProbe: self.livenessProbe {
+                  failureThreshold: std.ceil(600 / self.periodSeconds),
                 },
                 readinessProbe: self.livenessProbe {
                   successThreshold: 3,
@@ -936,8 +944,11 @@ local CA(name, namespace, issuer) = {
                 },
                 livenessProbe: {
                   httpGet: {path: "/healthz", port: 10251, scheme: "HTTP"},
-                  initialDelaySeconds: 180,
                   timeoutSeconds: 20,
+                  periodSeconds: 30,
+                },
+                startupProbe: self.livenessProbe {
+                  failureThreshold: std.ceil(600 / self.periodSeconds),
                 },
                 readinessProbe: self.livenessProbe {
                   successThreshold: 3,
@@ -1174,6 +1185,9 @@ local CA(name, namespace, issuer) = {
                   successThreshold: 1,
                   failureThreshold: 3,
                 },
+                startupProbe: self.livenessProbe {
+                  failureThreshold: std.ceil(300 / self.periodSeconds),
+                },
                 readinessProbe: self.livenessProbe {
                   // TODO: enable "ready" plugin when released.
                   //httpGet: {path: "/ready", port: 8181, scheme: "HTTP"},
@@ -1307,11 +1321,13 @@ local CA(name, namespace, issuer) = {
                 },
                 livenessProbe: {
                   httpGet: {path: "/livez", port: 8443, scheme: "HTTPS"},
-                  initialDelaySeconds: 60,
                   failureThreshold: 10,
                   periodSeconds: 30,
                   successThreshold: 1,
                   timeoutSeconds: 20,
+                },
+                startupProbe: self.livenessProbe {
+                  failureThreshold: std.ceil(120 / self.periodSeconds),
                 },
                 readinessProbe: self.livenessProbe {
                   httpGet+: {path: "/readyz"},
