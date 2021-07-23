@@ -47,7 +47,6 @@
     http_proxy: $.webcache.svc,
   },
   jenkins_containos: import "jenkins-containos.jsonnet",
-  gitlab_runner: import "gitlab-runner.jsonnet",
   openhab: import "openhab.jsonnet",
   restic: import "restic.jsonnet",
 }
