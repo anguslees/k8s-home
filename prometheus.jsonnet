@@ -166,7 +166,7 @@ local path_join(prefix, suffix) = (
             //  sample. Thus, to plan the capacity of a Prometheus server,
             //  you can use the rough formula:
             //  needed_disk_space = retention_time_seconds * ingested_samples_per_second * bytes_per_sample
-            retention_days:: prom.deploy.spec.template.spec.containers_.default.args_.retention_days,
+            retention_days:: prom.deploy.spec.template.spec.containers_.prometheus.args_.retention_days,
             retention_secs:: self.retention_days * 86400,
             time_series:: 1000, // wild guess
             samples_per_sec:: self.time_series / $.config.global.scrape_interval_secs,
@@ -209,8 +209,9 @@ local path_join(prefix, suffix) = (
                 }],
               },
             },
+            default_container: "prometheus",
             containers_+: {
-              default: kube.Container("prometheus") {
+              prometheus: kube.Container("prometheus") {
                 local this = self,
                 image: "quay.io/prometheus/prometheus:v2.28.1", // renovate
                 args_+: {
@@ -342,8 +343,9 @@ local path_join(prefix, suffix) = (
                 }],
               },
             },
+            default_container: "alertmanager",
             containers_+: {
-              default: kube.Container("alertmanager") {
+              alertmanager: kube.Container("alertmanager") {
                 image: "quay.io/prometheus/alertmanager:v0.22.2", // renovate
                 args_+: {
                   "config.file": "/etc/alertmanager/config.yml",
