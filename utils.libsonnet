@@ -68,11 +68,11 @@ local kube = import "kube.libsonnet";
 
     metadata+: {
       annotations+: {
-        "kubernetes.io/ingress.class": "nginx",
         "external-dns.alpha.kubernetes.io/target": "webhooks.oldmacdonald.farm",
       },
     },
     spec+: {
+      ingressClassName: "nginx",
       rules: [
         {
           host: this.host,
@@ -112,11 +112,12 @@ local kube = import "kube.libsonnet";
 
     metadata+: {
       annotations+: {
-        "kubernetes.io/ingress.class": "nginx-internal",
+        "kubernetes.io/ingress.class": this.spec.ingressClassName, // TODO: legacy, remove
       },
     },
 
     spec+: {
+      ingressClassName: "nginx-internal",
       tls: [],
       // Default to single-service - override if you want something else.
       rules: [

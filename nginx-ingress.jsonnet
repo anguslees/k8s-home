@@ -1,6 +1,23 @@
 local kube = import "kube.libsonnet";
 local utils = import "utils.libsonnet";
+local certman = import "cert-manager.jsonnet";
 local metallb = (import "all.jsonnet").metallb;
+
+local ValidatingWebhookConfiguration(name) = kube._Object("admissionregistration.k8s.io/v1", "ValidatingWebhookConfiguration", name) {
+  webhooks_:: {},
+  webhooks: kube.mapToNamedList(self.webhooks_),
+};
+
+local apiGroup(gv) = (
+  local split = std.splitLimit(gv, "/", 1);
+  if std.length(split) == 1 then "" else split[0]
+);
+
+local issuerRef(issuer) = {
+  group: apiGroup(issuer.apiVersion),
+  kind: issuer.kind,
+  name: issuer.metadata.name,
+};
 
 {
   namespace:: { metadata+: { namespace: "kube-system" }},
@@ -99,6 +116,11 @@ local metallb = (import "all.jsonnet").metallb;
         verbs: ["update"],
       },
       {
+        apiGroups: ["networking.k8s.io"],
+        resources: ["ingressclasses"],
+        verbs: ["get", "list", "watch"],
+      },
+      {
         apiGroups: [""],
         resources: ["events"],
         verbs: ["create", "patch"],
@@ -107,37 +129,33 @@ local metallb = (import "all.jsonnet").metallb;
   },
 
   ingressControllerRole: kube.Role("nginx-ingress-controller") + $.namespace {
+    local leaderElectRule(deploy) = {
+      local container = deploy.spec.template.spec.containers_.default,
+      local election_id = container.args_["election-id"],
+      local ingress_class = ({"ingress-class": "nginx"} + container.args_)["ingress-class"],
+      apiGroups: [""],
+      resources: ["configmaps"],
+      resourceNames: ["%s-%s" % [election_id, ingress_class]],
+      verbs: ["get", "update"],
+    },
+
     rules: [
       {
         apiGroups: [""],
-        resources: ["configmaps", "pods", "secrets", "namespaces"],
+        resources: ["namespaces"],
         verbs: ["get"],
       },
       {
         apiGroups: [""],
-        resources: ["configmaps"],
-        local election_id = "ingress-controller-leader",
-        local ingress_class = "nginx",
-        resourceNames: ["%s-%s" % [election_id, ingress_class]],
-        verbs: ["get", "update"],
+        resources: ["configmaps", "pods", "secrets", "endpoints", "services"],
+        verbs: ["get", "list", "watch"],
       },
-      {
-        apiGroups: [""],
-        resources: ["configmaps"],
-        local election_id = "ingress-controller-leader",
-        local ingress_class = "nginx-internal",
-        resourceNames: ["%s-%s" % [election_id, ingress_class]],
-        verbs: ["get", "update"],
-      },
+      leaderElectRule($.controller),
+      leaderElectRule($.controllerIntern),
       {
         apiGroups: [""],
         resources: ["configmaps"],
         verbs: ["create"],
-      },
-      {
-        apiGroups: [""],
-        resources: ["endpoints"],
-        verbs: ["get"], // ["create", "update"],
       },
     ],
   },
@@ -173,10 +191,8 @@ local metallb = (import "all.jsonnet").metallb;
       replicas: 2,
       template+: utils.PromScrape(10254) {
         spec+: {
-          nodeSelector+: utils.archSelector("amd64"),
           serviceAccountName: $.serviceAccount.metadata.name,
-          //hostNetwork: true, // access real source IPs, IPv6, etc
-          terminationGracePeriodSeconds: 60,
+          terminationGracePeriodSeconds: 300,
           affinity+: {
             podAffinity+: {
               preferredDuringSchedulingIgnoredDuringExecution+: [{
@@ -207,18 +223,29 @@ local metallb = (import "all.jsonnet").metallb;
               ],
             },
           },
+          volumes_+: {
+            webhookcert: kube.SecretVolume($.webhook.cert.secret_),
+          },
           containers_+: {
             default: kube.Container("nginx") {
-              image: "quay.io/kubernetes-ingress-controller/nginx-ingress-controller:0.33.0", // renovate
+              image: "k8s.gcr.io/ingress-nginx/controller:v0.48.1", // renovate
               env_+: {
                 POD_NAME: kube.FieldRef("metadata.name"),
                 POD_NAMESPACE: kube.FieldRef("metadata.namespace"),
+                LD_PRELOAD: "/usr/local/lib/libmimalloc.so",
               },
               command: ["/nginx-ingress-controller"],
               args_+: {
+                "election-id": this.metadata.name + "-leader",
+
+                "shutdown-grace-period": this.spec.template.spec.terminationGracePeriodSeconds - 2,
+
                 local fqname(o) = "%s/%s" % [o.metadata.namespace, o.metadata.name],
                 "default-backend-service": fqname($.defaultSvc),
                 configmap: fqname($.config),
+                "validating-webhook": ":8443",
+                "validating-webhook-certificate": "/webookcert/tls.crt",
+                "validating-webhook-key": "/webhookcert/tls.key",
                 // publish-service requires svc to have .Status.LoadBalancer.Ingress
                 "publish-service": fqname($.service),
 
@@ -226,28 +253,38 @@ local metallb = (import "all.jsonnet").metallb;
                 "udp-services-configmap": fqname($.udpconf),
 
                 "annotations-prefix": "nginx.ingress.kubernetes.io",
-                "sort-backends": true,
+              },
+              lifecycle: {
+                preStop: {exec: {command: ["/wait-shutdown"]}},
               },
               securityContext: {
                 capabilities: {drop: ["ALL"], add: ["NET_BIND_SERVICE"]},
-                runAsUser: 33, // www-data
+                runAsUser: 101,
+                allowPrivilegeEscalation: true,
               },
               ports_: {
                 http: { containerPort: 80 },
                 https: { containerPort: 443 },
+                webhook: { containerPort: 8443 },
               },
-              readinessProbe: {
+              volumeMounts_: {
+                webhookcert: {mountPath: "/webhookcert", readOnly: true},
+              },
+              livenessProbe: {
                 httpGet: { path: "/healthz", port: 10254, scheme: "HTTP" },
-                failureThreshold: 3,
+                failureThreshold: 5,
                 periodSeconds: 10,
                 successThreshold: 1,
                 timeoutSeconds: 1,
               },
-              livenessProbe: self.readinessProbe {
-                initialDelaySeconds: 10,
+              startupProbe: self.livenessProbe {
+                failureThreshold: std.ceil(120 / self.periodSeconds),
+              },
+              readinessProbe: self.livenessProbe {
+                failureThreshold: 3,
               },
               resources: {
-                requests: {cpu: "10m", memory: "120Mi"},
+                requests: {cpu: "10m", memory: "90Mi"},
                 limits: { cpu: "1", memory: "500Mi" },
               },
             },
@@ -278,12 +315,85 @@ local metallb = (import "all.jsonnet").metallb;
 
                 "ingress-class": "nginx-internal",
 
-                // publish-service requires svc to have .Status.LoadBalancer.Ingress
-                "publish-service": fqname($.serviceIntern),
-
                 "tcp-services-configmap": fqname($.tcpconfIntern),
                 "udp-services-configmap": fqname($.udpconfIntern),
+
+                // publish-service requires svc to have .Status.LoadBalancer.Ingress
+                "publish-service": fqname($.serviceIntern),
               },
+            },
+          },
+        },
+      },
+    },
+  },
+
+  webhook: {
+    service: kube.Service("ingress-nginx-admission") + $.namespace {
+      local this = self,
+      target_pod: $.controller.spec.template,
+      spec+: {
+        ports: [
+          {name: "webhook", port: 443, targetPort: "webhook", protocol: "TCP"},
+        ],
+      },
+    },
+
+    selfSigner: certman.Issuer("selfsign") + $.namespace {
+      spec+: {selfSigned: {}},
+    },
+
+    cert: certman.Certificate("ingress-nginx-admission") + $.namespace {
+      local this = self,
+      spec+: {
+        issuerRef: issuerRef($.webhook.selfSigner),
+        isCA: false,
+        usages: ["digital signature", "key encipherment"],
+        commonName: this.metadata.name,
+        secretName: this.metadata.name,
+        keyAlgorithm: "ecdsa",
+        duration_h_:: 365 * 24 / 4, // 3 months
+        duration: "%dh" % self.duration_h_,
+        renewBefore_h_:: self.duration_h_ / 3,
+        renewBefore: "%dh" % self.renewBefore_h_,
+      },
+
+      // Fake Secret, used to represent the _real_ cert Secret to jsonnet
+      secret_:: kube.Secret(this.spec.secretName) {
+        metadata+: {namespace: this.metadata.namespace},
+        type: "kubernetes.io/tls",
+        data: {[k]: error "attempt to access TLS value directly"
+          for k in ["tls.crt", "tls.key", "ca.crt"]},
+      },
+    },
+
+    validatinghook: ValidatingWebhookConfiguration("ingress-nginx-admission") {
+      metadata+: {
+        annotations+: {
+          local cert = $.webhook.cert,
+          "cert-manager.io/inject-ca-from": "%s/%s" % [
+            cert.metadata.namespace, cert.metadata.name]
+        },
+      },
+
+      webhooks_+: {
+        "validate.nginx.ingress.kubernetes.io": {
+          matchPolicy: "Equivalent",
+          rules: [{
+            apiGroups: ["networking.k8s.io"],
+            apiVersions: ["v1beta1"],
+            operations: ["CREATE", "UPDATE"],
+            resources: ["ingresses"],
+          }],
+          failurePolicy: "Ignore",
+          sideEffects: "None",
+          admissionReviewVersions: ["v1", "v1beta1"],
+          clientConfig: {
+            local s = $.webhook.service,
+            service: {
+              namespace: s.metadata.namespace,
+              name: s.metadata.name,
+              path: "/networking/v1beta1/ingresses",
             },
           },
         },
