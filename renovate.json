@@ -6,6 +6,18 @@
     "group:allNonMajor",
     "schedule:weekly"
   ],
+  "packageRules": [
+    {
+      "matchPackagePatterns": [
+        "*"
+      ],
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "groupName": "all patch dependencies",
+      "groupSlug": "all-patch"
+    }
+  ]
   "regexManagers": [
     {
       "description": "Update docker version variables in jsonnet",
