@@ -3,7 +3,6 @@
     "config:base",
     "docker:pinDigests",
     "group:recommended",
-    "group:allNonMajor",
     "schedule:weekly"
   ],
   "packageRules": [
