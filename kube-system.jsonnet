@@ -310,7 +310,7 @@ local CA(name, namespace, issuer) = {
                 },
                 resources+: {
                   limits: {memory: "700Mi", cpu: "700m"},
-                  requests: self.limits {memory: "400Mi"},
+                  requests: {memory: "400Mi", cpu: "400m"},
                 },
                 // lifecycle+: {
                 //   local etcdctl = [
@@ -682,7 +682,7 @@ local CA(name, namespace, issuer) = {
                   successThreshold: 3,
                 },
                 resources+: {
-                  requests: {cpu: "1000m", memory: "400Mi"},
+                  requests: {cpu: "800m", memory: "400Mi"},
                 },
                 volumeMounts_+: {
                   kubelet_client: {mountPath: "/keys/apiserver-kubelet-client", readOnly: true},
