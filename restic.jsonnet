@@ -41,7 +41,8 @@ local host = "restic.oldmacdonald.farm";
     metadata+: {
       annotations+: {
         "kubernetes.io/ingress.class": "nginx-internal",
-        "external-dns.alpha.kubernetes.io/target": "webhooks.oldmacdonald.farm",
+        // restic upload sends large bodies (that's the point)
+        "nginx.ingress.kubernetes.io/proxy-body-size": "0",
       },
     },
     spec+: {
