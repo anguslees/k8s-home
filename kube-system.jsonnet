@@ -18,7 +18,7 @@ local certman = import "cert-manager.jsonnet";
 // renovate: depName=k8s.gcr.io/kube-proxy
 local version = "v1.21.3";
 // renovate: depName=k8s.gcr.io/kube-apiserver
-local apiserverVersion = "v1.21.3";
+local apiserverVersion = "v1.22.0";
 
 local externalHostname = "kube.lan";
 local apiServer = "https://%s:6443" % [externalHostname];
