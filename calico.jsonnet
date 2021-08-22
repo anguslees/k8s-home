@@ -191,8 +191,9 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
 
     deploy: kube.Deployment("calico-kube-controllers") + $.namespace {
       spec+: {
-        template+: utils.CriticalPodSpec + {
+        template+: {
           spec+: {
+            priorityClassName: "high",
             nodeSelector+: {"kubernetes.io/os": "linux"},
             tolerations+: utils.toleratesMaster,
             serviceAccountName: $.controllers.sa.metadata.name,

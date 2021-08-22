@@ -199,8 +199,18 @@ local CA(name, namespace, issuer) = {
           spec+: {
             hostNetwork: true,
             dnsPolicy: "ClusterFirstWithHostNet",
-            tolerations+: utils.toleratesMaster + bootstrapTolerations,
+            tolerations+: utils.toleratesMaster + bootstrapTolerations + [{
+              effect: "NoSchedule",
+              key: "node.cloudprovider.kubernetes.io/uninitialized",
+              value: "true",
+            }],
             automountServiceAccountToken: false,
+
+            // etcd is really 'system-cluster-critical', but if we get
+            // pre-empted we can end up in a place where the cluster
+            // can't recover.  Really we want "don't preempt me."
+            priorityClassName: "system-node-critical",
+
             securityContext+: {
               // uid=0 needed to write to /var/lib/etcd.  NB:
               // kubelet always creates DirectoryOrCreate hostpaths
@@ -569,6 +579,11 @@ local CA(name, namespace, issuer) = {
       spec+: {
         template+: utils.CriticalPodSpec {
           spec+: {
+            // apiserver is really 'system-cluster-critical', but if we get
+            // pre-empted we can end up in a place where the cluster
+            // can't recover.  Really we want "don't preempt me."
+            priorityClassName: "system-node-critical",
+
             securityContext+: {
               runAsNonRoot: true,
               runAsUser: 65534,

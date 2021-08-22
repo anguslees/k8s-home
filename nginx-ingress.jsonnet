@@ -192,6 +192,7 @@ local issuerRef(issuer) = {
       template+: utils.PromScrape(10254) {
         spec+: {
           serviceAccountName: $.serviceAccount.metadata.name,
+          priorityClassName: "high",
           terminationGracePeriodSeconds: 300,
           affinity+: {
             podAffinity+: {

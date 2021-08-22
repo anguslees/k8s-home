@@ -792,7 +792,7 @@ local version = "v1.1.9";
       labels+: {operator: "rook", "storage-backend": "ceph"},
     },
     spec+: {
-      template+: /* utils.CriticalPodSpec - not allowed outside kube-system */ {
+      template+: {
         spec+: {
           serviceAccountName: $.sa.metadata.name,
           volumes_+: {
@@ -800,6 +800,7 @@ local version = "v1.1.9";
             configdir: kube.EmptyDirVolume(),
           },
           nodeSelector+: utils.archSelector("amd64"),
+          priorityClassName: "high",
           containers_+: {
             operator: kube.Container("operator") {
               image: "rook/ceph:" + version,
