@@ -33,7 +33,7 @@ local jenkins = import "jenkins.jsonnet";
               },
               containers_+: {
                 update: utils.shcmd("update") {
-                  image: "alpine/git:v2.30.2", // renovate
+                  image: "alpine/git:v2.32.0", // renovate
                   volumeMounts_+: {
                     scratch: {mountPath: "/scratch"},
                   },
