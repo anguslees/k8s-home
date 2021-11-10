@@ -18,7 +18,7 @@ local certman = import "cert-manager.jsonnet";
 // renovate: depName=k8s.gcr.io/kube-proxy
 local version = "v1.21.3";
 // renovate: depName=k8s.gcr.io/kube-apiserver
-local apiserverVersion = "v1.22.0";
+local apiserverVersion = "v1.22.3";
 
 local externalHostname = "kube.lan";
 local apiServer = "https://%s:6443" % [externalHostname];
@@ -241,7 +241,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               etcd: kube.Container("etcd") {
-                image: "gcr.io/etcd-development/etcd:v3.5.0", // renovate
+                image: "gcr.io/etcd-development/etcd:v3.5.1", // renovate
                 securityContext+: {
                   allowPrivilegeEscalation: false,
                 },
@@ -1287,7 +1287,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               default: kube.Container("metrics-server") {
-                image: "k8s.gcr.io/metrics-server/metrics-server:v0.5.0", // renovate
+                image: "k8s.gcr.io/metrics-server/metrics-server:v0.5.1", // renovate
                 command: ["/metrics-server"],
                 args_+: {
                   "logtostderr": "true",
