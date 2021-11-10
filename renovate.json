@@ -31,8 +31,8 @@
       "description": "Update docker images in jsonnet",
       "fileMatch": ["\\.(jsonnet|libsonnet)$"],
       "matchStrings": [
-        "image: ['\"](?<depName>.+?):(?<currentValue>.+?)['\"], // renovate",
-        "local +.? = ['\"](?<depName>.+?):(?<currentValue>.+?)['\"][,;] // renovate"
+        "image: ['\"](?<depName>.+?):(?<currentValue>.+?)(?:@(?<currentDigest>sha256:[a-f0-9]+))?['\"], // renovate",
+        "local +.? = ['\"](?<depName>.+?):(?<currentValue>.+?)(?:@(?<currentDigest>sha256:[a-f0-9]+))?['\"][,;] // renovate"
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
