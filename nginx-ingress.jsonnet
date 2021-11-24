@@ -228,7 +228,7 @@ local issuerRef(issuer) = {
           },
           containers_+: {
             default: kube.Container("nginx") {
-              image: "k8s.gcr.io/ingress-nginx/controller:v0.48.1", // renovate
+              image: "k8s.gcr.io/ingress-nginx/controller:v0.50.0", // renovate
               env_+: {
                 POD_NAME: kube.FieldRef("metadata.name"),
                 POD_NAMESPACE: kube.FieldRef("metadata.namespace"),
