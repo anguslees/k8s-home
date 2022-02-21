@@ -16,9 +16,9 @@ local certman = import "cert-manager.jsonnet";
 // 3. kubelets (see coreos-pxe-install.jsonnet:coreos_kubelet_tag)
 
 // renovate: depName=k8s.gcr.io/kube-proxy
-local version = "v1.21.3";
+local version = "v1.22.6";
 // renovate: depName=k8s.gcr.io/kube-apiserver
-local apiserverVersion = "v1.22.3";
+local apiserverVersion = "v1.22.6";
 
 local externalHostname = "kube.lan";
 local apiServer = "https://%s:6443" % [externalHostname];
@@ -30,17 +30,19 @@ local dnsDomain = "cluster.local";
 // NB: these IPs are also burnt into the peer/server certificates,
 // because of the golang TLS verification wars.
 local etcdMembers = {
-  "fc4698cdc1184810a2c3447a7ee66689": "192.168.0.129",  // etcd-2 - Red HP
-  "0b5642a6cc18493d81a606483d9cbb7b": "192.168.0.132",  // etcd-1 - Red Lenovo
-  "887f1b514ea54520a61643163d427d42": "192.168.0.161",  // etcd-0 - Old tower
-  "765885d83e774555bc7ee0f9c6fc1178": "192.168.0.117",  // Dell silver/stickers (new)
+  "fc4698cdc1184810a2c3447a7ee66689": "192.168.0.129",  // etcd-0 - Red HP
+  // Dead
+  //"0b5642a6cc18493d81a606483d9cbb7b": "192.168.0.132",  // etcd-1 - Red Lenovo
+  "887f1b514ea54520a61643163d427d42": "192.168.0.161",  // etcd-2 - Old tower
+  "765885d83e774555bc7ee0f9c6fc1178": "192.168.0.117",  // etcd-1 - Dell silver/stickers (new)
+  "6751cbb9e81a4a928510cec6eec02a78": "192.168.0.102",  // etcd-3 - Lenovo T530
 };
-local etcdLearners = std.set(["765885d83e774555bc7ee0f9c6fc1178"]);
+local etcdLearners = std.set(["887f1b514ea54520a61643163d427d42"]);
 
 local isolateMasters = false;
 
 local labelSelector(labels) = {
-  matchExpressions: [
+  matchExpressions+: [
     {key: kv[0], operator: "In", values: [kv[1]]}
     for kv in kube.objectItems(labels)
   ],
@@ -54,6 +56,30 @@ local bootstrapTolerations = [{
   ["node.kubernetes.io/not-ready", "NoExecute"],
   ["node.kubernetes.io/unreachable", "NoExecute"],
 ]];
+
+local andTerm(orig, extra) = (
+  local base = if std.length(orig) == 0 then [{}] else orig;
+  [t + extra for t in base]
+);
+
+local checkpoint = {
+  metadata+: {
+    annotations+: {
+      "checkpointer.alpha.coreos.com/checkpoint": "true",
+    },
+  },
+  spec+: {
+    affinity+: {
+      nodeAffinity+: {
+        requiredDuringSchedulingIgnoredDuringExecution+: {
+          // Limit checkpointer to amd64 nodes for now.
+          local superterm = if 'nodeSelectorTerms' in super then super.nodeSelectorTerms else [],
+          nodeSelectorTerms: andTerm(superterm, labelSelector(utils.archSelector("amd64"))),
+        },
+      },
+    },
+  },
+};
 
 local apiGroup(gv) = (
   local split = std.splitLimit(gv, "/", 1);
@@ -72,19 +98,19 @@ local Certificate(name, issuer) = certman.Certificate(name) {
     isCA: false,
     usages_:: ["digital signature", "key encipherment"],
     usages: std.set(self.usages_),
-    organization: [],
+    subject: {organizations: []},
     dnsNames_:: [],
     dnsNames: std.set(self.dnsNames_),
     ipAddresses_:: [],
     ipAddresses: std.set(self.ipAddresses_),
     commonName: name,
     secretName: name,
-    keyAlgorithm: "ecdsa",
     duration_h_:: 365 * 24 / 4, // 3 months
     duration: "%dh" % self.duration_h_,
     renewBefore_h_:: self.duration_h_ / 3,
     renewBefore: "%dh" % self.renewBefore_h_,
     //privateKey+: {rotationPolicy: "Always"},  TODO: set this, after upgrading to newer cert-manager
+    privateKey: {algorithm: "ECDSA"},
   },
 
   // Fake Secret, used to represent the _real_ cert Secret to jsonnet
@@ -190,12 +216,7 @@ local CA(name, namespace, issuer) = {
           // paths :(
           //data: {storage: "10Gi", storageClass: "local-storage"},
         },
-        template+: utils.CriticalPodSpec + utils.PromScrape(2381) {
-          metadata+: {
-            annotations+: {
-              "checkpointer.alpha.coreos.com/checkpoint": "true",
-            },
-          },
+        template+: utils.CriticalPodSpec + utils.PromScrape(2381) + checkpoint {
           spec+: {
             hostNetwork: true,
             dnsPolicy: "ClusterFirstWithHostNet",
@@ -227,23 +248,21 @@ local CA(name, namespace, issuer) = {
               etcd_client: kube.SecretVolume($.etcd.monitorCert.secret_),
             },
             affinity+: {
-              nodeAffinity: {
+              nodeAffinity+: {
                 requiredDuringSchedulingIgnoredDuringExecution+: {
-                  nodeSelectorTerms: [
-                    labelSelector(utils.archSelector("amd64")) + {
-                      matchExpressions+: [
-                        {
-                          key: "kubernetes.io/hostname",
-                          operator: "In",
-                          values: std.objectFields(etcdMembers),
-                        },
-                      ],
-                    },
-                  ],
+                  nodeSelectorTerms: andTerm(super.nodeSelectorTerms, {
+                    matchExpressions+: [
+                      {
+                        key: "kubernetes.io/hostname",
+                        operator: "In",
+                        values: std.objectFields(etcdMembers),
+                      },
+                    ],
+                  }),
                 },
               },
-              podAntiAffinity: {
-                requiredDuringSchedulingIgnoredDuringExecution: [{
+              podAntiAffinity+: {
+                requiredDuringSchedulingIgnoredDuringExecution+: [{
                   labelSelector: labelSelector(this.spec.template.metadata.labels),
                   topologyKey: "kubernetes.io/hostname",
                 }],
@@ -279,7 +298,11 @@ local CA(name, namespace, issuer) = {
                   "trusted-ca-file": "/keys/etcd-ca/ca.crt",
                   "election-timeout": "10000",
                   "heartbeat-interval": "1000",
+                  "experimental-warning-apply-duration": "1s", // default 100ms too noisy
                   "listen-metrics-urls": "http://0.0.0.0:2381",
+
+                  "experimental-initial-corrupt-check": true,
+                  "v2-deprecation": "write-only",  // accelerate v2 deprecation
                 },
                 env_+: {
                   ETCD_NAME: kube.FieldRef("spec.nodeName"),
@@ -299,6 +322,8 @@ local CA(name, namespace, issuer) = {
                 livenessProbe: {
                   // /health fails if endpoint is out of quorum, so don't use for liveness!
                   tcpSocket: {port: 2381},
+                  // v1.23 + GRPCContainerProbe feature gate
+                  //grpc: {port: 2379}
                   failureThreshold: 5,
                   timeoutSeconds: 15,
                   periodSeconds: 30,
@@ -309,7 +334,8 @@ local CA(name, namespace, issuer) = {
                   failureThreshold: 3,
                 },
                 startupProbe: self.livenessProbe {
-                  failureThreshold: std.ceil(30 * 60 / self.periodSeconds),
+                  local timeoutSeconds = 30 * 60,
+                  failureThreshold: std.ceil(timeoutSeconds / self.periodSeconds),
                 },
                 volumeMounts_+: {
                   data: {mountPath: "/data"},
@@ -323,16 +349,12 @@ local CA(name, namespace, issuer) = {
                   requests: {memory: "400Mi", cpu: "400m"},
                 },
                 // lifecycle+: {
-                //   local etcdctl = [
-                //     "etcdctl",
-                //     "--endpoints=https://etcd:2379",
-                //     "--cacert=/keys/etcd-ca.pem",
-                //     "--cert=/keys/etcd-$(ETCD_NAME)-server.pem",
-                //     "--key=/keys/etcd-$(ETCD_NAME)-server-key.pem",
-                //   ],
-                //   postStart: {`
+                //   local etcdctl = ["etcdctl"],
+                //   postStart: {
                 //     exec: {
                 //       command: etcdctl + [
+                //         // FIXME: shadows ETCDCTL_ENDPOINTS env var (fatal error)
+                //         "--endpoints=https://etcd:2379",
                 //         "member",
                 //         "add",
                 //         "$(ETCD_NAME)",
@@ -345,6 +367,7 @@ local CA(name, namespace, issuer) = {
                 //       command: etcdctl + [
                 //         "member",
                 //         "remove",
+                //         // FIXME: needs to be ID, not NAME
                 //         "$(ETCD_NAME)",
                 //       ],
                 //     },
@@ -420,7 +443,7 @@ local CA(name, namespace, issuer) = {
     kubernetes_admin: Certificate("kubernetes-admin", $.secrets.ca.issuer) + $.namespace {
       spec+: {
         usages_+: ["client auth"],
-        organization: ["system:masters"],
+        subject+: {organizations: ["system:masters"]},
         duration_h_: 365 * 24 / 2, // 6 months - requires manually copying out the key/cert
       },
     },
@@ -505,7 +528,7 @@ local CA(name, namespace, issuer) = {
                   metrics: {containerPort: 10249},
                 },
                 resources+: {
-                  requests: {cpu: "20m", memory: "40Mi"},
+                  requests: {cpu: "20m", memory: "50Mi"},
                 },
                 securityContext: {
                   privileged: true,
@@ -515,9 +538,14 @@ local CA(name, namespace, issuer) = {
                   xtables_lock: {mountPath: "/run/xtables.lock"},
                   lib_modules: {mountPath: "/lib/modules", readOnly: true},
                 },
+                startupProbe: self.livenessProbe {
+                  failureThreshold: 10,
+                },
+                readinessProbe: self.livenessProbe {
+                  successThreshold: 1,
+                },
                 livenessProbe: {
                   httpGet: {path: "/healthz", port: 10256, scheme: "HTTP"},
-                  initialDelaySeconds: 30,
                   failureThreshold: 3,
                 },
               },
@@ -549,7 +577,7 @@ local CA(name, namespace, issuer) = {
     kubeletClientCert: Certificate("kube-apiserver-kubelet-client", $.secrets.ca.issuer) + $.namespace {
       spec+: {
         usages_+: ["client auth"],
-        organization: ["system:masters"],
+        subject+: {organizations: ["system:masters"]},
       },
     },
 
@@ -670,6 +698,10 @@ local CA(name, namespace, issuer) = {
                     // Workaround old coreos update-operator code.
                     // https://github.com/coreos/container-linux-update-operator/issues/196
                     "extensions/v1beta1/daemonsets": true,
+                    // For old rook-ceph helm chart
+                    "rbac.authorization.k8s.io/v1beta1": true,
+                    "apiextensions.k8s.io/v1beta1": true,
+                    "certificates.k8s.io/v1beta1/certificatesigningrequests": true,
                   },
                   "runtime-config": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.runtime_config_)]),
                 },
@@ -726,12 +758,7 @@ local CA(name, namespace, issuer) = {
       local this = self,
       spec+: {
         replicas: 2,
-        template+: {
-          metadata+: {
-            annotations+: {
-              "checkpointer.alpha.coreos.com/checkpoint": "true",
-            },
-          },
+        template+: checkpoint {
           spec+: {
             hostNetwork: true,
             dnsPolicy: "ClusterFirstWithHostNet",
@@ -741,19 +768,21 @@ local CA(name, namespace, issuer) = {
             affinity+: {
               nodeAffinity+: {
                 requiredDuringSchedulingIgnoredDuringExecution+: {
-                  nodeSelectorTerms: if isolateMasters then [
-                    labelSelector({
-                      "node-role.kubernetes.io/control-plane": "",
-                    }),
-                  ] else [
-                    labelSelector({
-                      "apiserver": "true",
-                    }),
-                  ],
+                  nodeSelectorTerms: andTerm(
+                    super.nodeSelectorTerms,
+                    if isolateMasters then
+                      labelSelector({
+                        "node-role.kubernetes.io/control-plane": "",
+                      })
+                    else
+                      labelSelector({
+                        "apiserver": "true",
+                      })
+                  ),
                 },
               },
-              podAntiAffinity: {
-                requiredDuringSchedulingIgnoredDuringExecution: [{
+              podAntiAffinity+: {
+                requiredDuringSchedulingIgnoredDuringExecution+: [{
                   labelSelector: labelSelector(this.spec.template.metadata.labels),
                   topologyKey: "kubernetes.io/hostname",
                 }],
@@ -858,7 +887,7 @@ local CA(name, namespace, issuer) = {
                   GOGC: "25",
                 },
                 livenessProbe: {
-                  httpGet: {path: "/healthz", port: 10252, scheme: "HTTP"},
+                  httpGet: {path: "/healthz", port: 10257, scheme: "HTTPS"},
                   timeoutSeconds: 20,
                   periodSeconds: 30,
                 },
@@ -1008,12 +1037,7 @@ local CA(name, namespace, issuer) = {
 
     deploy: kube.DaemonSet("pod-checkpointer") + $.namespace {
       spec+: {
-        template+: {
-          metadata+: {
-            annotations+: {
-              "checkpointer.alpha.coreos.com/checkpoint": "true",
-            },
-          },
+        template+: checkpoint {
           spec+: {
             serviceAccountName: $.checkpointer.sa.metadata.name,
             hostNetwork: true,
@@ -1026,11 +1050,11 @@ local CA(name, namespace, issuer) = {
               // wherever checkpointed (apiserver) jobs are running
               [if isolateMasters then "nodeAffinity"]+: {
                 requiredDuringSchedulingIgnoredDuringExecution+: {
-                  nodeSelectorTerms: [
+                  nodeSelectorTerms: andTerm(
+                    super.nodeSelectorTerms,
                     labelSelector({
                       "node-role.kubernetes.io/control-plane": "",
-                    })
-                  ],
+                    })),
                 },
               },
             },
@@ -1356,7 +1380,7 @@ local CA(name, namespace, issuer) = {
       },
     },
 
-    apiSvc: kube._Object("apiregistration.k8s.io/v1beta1", "APIService", "v1beta1.metrics.k8s.io") {
+    apiSvc: kube._Object("apiregistration.k8s.io/v1", "APIService", "v1beta1.metrics.k8s.io") {
       spec+: {
         service: {
           name: $.metrics.svc.metadata.name,
@@ -1367,6 +1391,153 @@ local CA(name, namespace, issuer) = {
         insecureSkipTLSVerify: true,  // FIXME
         groupPriorityMinimum: 100,
         versionPriority: 100,
+      },
+    },
+  },
+
+  // Not actually deployed through this file (see
+  // coreos-pxe-install.jsonnet), but it makes sense to define the
+  // 'base' config here.
+  kubelet: {
+    local vs = std.split(std.lstripChars(version, "v"), "."),
+    local v = vs[0] + "." + vs[1],
+    config: kube.ConfigMap("kubelet-config-" + v) + $.namespace {
+      metadata+: {
+        annotations+: {
+          // Don't garbage collect these configmaps
+          "kubecfg.ksonnet.io/garbage-collect-strategy": "ignore",
+        },
+      },
+      data: {
+        "config.yaml": kubecfg.manifestYaml(self.config),
+        config:: {
+          // See https://kubernetes.io/docs/reference/config-api/kubelet-config.v1beta1/
+          apiVersion: "kubelet.config.k8s.io/v1beta1",
+          kind: "KubeletConfiguration",
+
+          // No kubelet config var for this?
+          // "cert-dir": "/var/lib/kubelet/pki",
+
+          // Kind of needs to be set in a drop-in:
+            //"hostname-override": "%m",
+          //"kubeconfig": "/etc/kubernetes/kubelet.conf",
+          //"bootstrap-kubeconfig": "/etc/kubernetes/bootstrap-kubelet.conf",
+
+          staticPodPath: "/etc/kubernetes/manifests",
+          syncFrequency: "5m",
+
+          logging: {format: "text"},
+          enableSystemLogHandler: false,
+          enableProfilingHandler: false,
+          enableDebugFlagsHandler: false,
+
+          shutdownGracePeriod: "90s",
+
+          tlsCipherSuites: std.set([
+            "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+            "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+            "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305",
+            "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+            "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305",
+            "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+            "TLS_RSA_WITH_AES_256_GCM_SHA384",
+            "TLS_RSA_WITH_AES_128_GCM_SHA256",
+          ]),
+          tlsMinVersion: "VersionTLS12",
+
+          rotateCertificates: true,
+          serverTLSBootstrap: true,
+          authentication: {
+            anonymous: {enabled: false},
+            webhook: {
+              enabled: true, // FIXME: bearer tokens for kubelet are not good.
+              cacheTTL: "5m",
+            },
+            x509: {
+              clientCAFile: "/var/lib/kubelet/pki/kube-ca/ca.crt",
+            },
+          },
+          authorization: {
+            mode: "Webhook",
+            webhook: {
+              cacheAuthorizedTTL: "5m",
+              cacheUnauthorizedTTL: "1m",
+            },
+          },
+          // Defaults, I should actually use this in coreos-pxe-install daemonset
+          //healthzBindAddress: "127.0.0.1",
+          //healthzPort: 10248,
+
+          clusterDomain: dnsDomain,
+          clusterDNS: [dnsIP],
+
+          runtimeRequestTimeout: "10m", // default: 2m
+
+          podPidsLimit: 10000,
+
+          serializeImagePulls: false,
+
+          eviction_:: {
+            "nodefs.available": {
+              hard: "1Gi", // default 10%
+              soft: "2Gi",
+              minimum_reclaim: "500Mi",
+              soft_grace_period: "2m",
+            },
+            "imagefs.available": {
+              hard: "2Gi", // default 15%
+              soft: "3Gi",
+              minimum_reclaim: "1Gi",
+              soft_grace_period: "2m",
+            },
+            "nodefs.inodesFree": {
+              hard: "5%",
+            },
+            "memory.available": {
+              hard: "0%", // default 100Mi
+            },
+          },
+          local manifestEviction(key) = {
+            [kv[0]]: kv[1][key] for kv in kube.objectItems(self.eviction_)
+            if std.objectHas(kv[1], key)
+          },
+          evictionHard: manifestEviction("hard"),
+          evictionSoft: manifestEviction("soft"),
+          evictionSoftGracePeriod: manifestEviction("soft_grace_period"),
+          evictionMinimumReclaim: manifestEviction("minimum_reclaim"),
+          evictionPressureTransitionPeriod: "5m",
+
+          featureGates: {
+            IPv6DualStack: true,
+            NodeSwap: true,
+          },
+
+          failSwapOn: false,
+          //memorySwap: {},  FIXME: todo!
+
+          cgroupRoot: "/",
+          cgroupDriver: "systemd",
+
+          kernelMemcgNotification: true,
+          kubeReservedCgroup: "/podruntime.slice",
+          kubeReserved: { // NB: not enforced
+            cpu: "100m",
+            memory: "256Mi",
+            "ephemeral-storage": "256Mi",
+            pid: "100",
+          },
+          systemReservedCgroup: "/system.slice",
+          systemReserved: {  // NB: not enforced
+            cpu: "10m",
+            memory: "100Mi",
+            "ephemeral-storage": "500Mi",
+            pid: "1000",
+          },
+
+          allowedUnsafeSysctls: ["net.core.rmem_*"],
+
+          volumePluginDir: "/var/lib/kubelet/volumeplugins",
+        },
       },
     },
   },
