@@ -13,75 +13,77 @@ local utils = import "utils.libsonnet";
       },
     },
     spec+: {
-      subresources+: {
-        status+: {},
-      },
-      validation+: {
-        openAPIV3Schema+: {
-          properties+: {
-            apiVersion: {
-              type: "string",
-            },
-            kind: {
-              type: "string",
-            },
-            metadata: {
-              type: "object",
-            },
-            spec+: {
+      versions_+: {
+        v1beta1+: {
+          subresources+: {status+: {}},
+          schema: {
+            openAPIV3Schema: {
               properties+: {
-                endpoints+: {
-                  items+: {
-                    properties: {
-                      dnsName: {
-                        type: "string",
-                      },
-                      labels: {
+                apiVersion: {
+                  type: "string",
+                },
+                kind: {
+                  type: "string",
+                },
+                metadata: {
+                  type: "object",
+                },
+                spec+: {
+                  properties+: {
+                    endpoints+: {
+                      items+: {
+                        properties: {
+                          dnsName: {
+                            type: "string",
+                          },
+                          labels: {
+                            type: "object",
+                          },
+                          providerSpecific: {
+                            items: {
+                              properties: {
+                                name: {
+                                  type: "string",
+                                },
+                                value: {
+                                  type: "string",
+                                },
+                              },
+                              type: "object",
+                            },
+                            type: "array",
+                          },
+                          recordTTL: {
+                            format: "int64",
+                            type: "integer",
+                          },
+                          recordType: {
+                            type: "string",
+                          },
+                          targets: {
+                            items: {
+                              type: "string",
+                            },
+                            type: "array",
+                          },
+                        },
                         type: "object",
                       },
-                      providerSpecific: {
-                        items: {
-                          properties: {
-                            name: {
-                              type: "string",
-                            },
-                            value: {
-                              type: "string",
-                            },
-                          },
-                          type: "object",
-                        },
-                        type: "array",
-                      },
-                      recordTTL: {
-                        format: "int64",
-                        type: "integer",
-                      },
-                      recordType: {
-                        type: "string",
-                      },
-                      targets: {
-                        items: {
-                          type: "string",
-                        },
-                        type: "array",
-                      },
+                      type: "array",
                     },
-                    type: "object",
                   },
-                  type: "array",
+                  type: "object",
+                },
+                status+: {
+                  properties+: {
+                    observedGeneration: {
+                      format: "int64",
+                      type: "integer",
+                    },
+                  },
+                  type: "object",
                 },
               },
-              type: "object",
-            },
-            status+: {
-              properties+: {
-                observedGeneration: {
-                  format: "int64",
-                  type: "integer",
-                },
-              },
-              type: "object",
             },
           },
         },
