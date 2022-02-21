@@ -3,7 +3,7 @@
 
   calico: import "calico.jsonnet",
 
-  rubber_stamp: import "rubber-stamp.jsonnet",
+  kubelet_approver: import "kubelet-csr-approver.jsonnet",
 
   ssecrets: import "sealed-secrets.jsonnet",
 
