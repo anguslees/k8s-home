@@ -78,7 +78,11 @@ local kube = import "kube.libsonnet";
           host: this.host,
           http: {
             paths: [
-              {path: path, backend: this.target_svc.name_port},
+              {
+                path: path,
+                backend: this.target_svc.name_port,
+                pathType: "Prefix",
+              },
             ],
           },
         },
@@ -125,7 +129,7 @@ local kube = import "kube.libsonnet";
           host: this.host,
           http: {
             paths: [
-              {path: "/", backend: this.target_svc.name_port},
+              {path: "/", backend: this.target_svc.name_port, pathType: "Prefix"},
             ],
           },
         },
@@ -182,7 +186,7 @@ local kube = import "kube.libsonnet";
     spec+: {data: error "(sealed) data required"},
   },
 
-  Certificate(name):: kube._Object("cert-manager.io/v1alpha2", "Certificate", name) {
+  Certificate(name):: kube._Object("cert-manager.io/v1", "Certificate", name) {
     local this = self,
     host:: error "host is required",
 
@@ -225,4 +229,12 @@ local kube = import "kube.libsonnet";
   ] + [
     // empty -> force trailing newline
   ]),
+
+  crdNew(crd, version):: (
+    local versions = if crd.apiVersion == "apiextensions.k8s.io/v1beta1" then
+    [crd.spec.version] else [v.name for v in crd.spec.versions];
+    assert std.member(versions, version) : "%s not one of CRD %s versions %s" % [version, crd.spec.group, versions];
+    local gv = crd.spec.group + "/" + version;
+    function (name) kube._Object(gv, crd.spec.names.kind, name)
+  ),
 }
