@@ -7,10 +7,10 @@ local utils = import "utils.libsonnet";
 //   kubectl label nodes -l flatcar-linux-update.v1.flatcar-linux.net/id flatcar-linux-update.v1.flatcar-linux.net/reboot-needed=true
 
 // renovate: depName=kubernetes/kubernetes datasource=github-releases versioning=semver
-local kubelet_tag = "v1.21.2";
+local kubelet_tag = "v1.21.7";
 // sha512 for linux/amd64 'node binaries' tarball
 // TODO: renovate doesn't support this yet.  Remove/fix/something.
-local kubelet_sha512 = "589c62ccdeeddc023b3a3cd8127b87ca532ab4ff481f74c876863ba89429e2dc537664d036f98fd188b63bc121fc4e08a4a35fb13c150517a27f2c35b677560e";
+local kubelet_sha512 = "e6a7f2507f6a4b2f36523573deac0ad3d7922638ca7a0b8c0f8fda32cd512cf342a66ab041d43e7c853963479eaad6c59d4d2a96c59c8cbe18b48166cc23125e";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)
@@ -28,6 +28,7 @@ local pxeNodeSelector = {
 };
 
 local sshKeys = [
+  importstr "/home/gus/.ssh/id_ed25519.pub",
   importstr "/home/gus/.ssh/id_rsa.pub",
 ];
 
@@ -156,9 +157,12 @@ local filekey(path) = (
                   "cluster-dns": "10.96.0.10",
                   "cluster-domain": "cluster.local",
                   "cert-dir": "/var/lib/kubelet/pki",
+                  allowed_unsafe_sysctls:: ["net.core.rmem_*"],
+                  "allowed-unsafe-sysctls": std.join(",", std.set(self.allowed_unsafe_sysctls)),
                   "exit-on-lock-contention": true,
                   "pod-max-pids": "10000",
                   "fail-swap-on": false,
+                  "kernel-memcg-notification": true,
                   "cgroup-driver": "systemd",
                   "cgroup-root": "/",
                   "container-runtime": "remote",
@@ -173,6 +177,7 @@ local filekey(path) = (
                   "rotate-server-certificates": true,
                   feature_gates_:: {
                     IPv6DualStack: true,
+                    //NodeSwap: true,
                   },
                   "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
                   "tls-min-version": "VersionTLS12",
@@ -225,7 +230,7 @@ local filekey(path) = (
                   "eviction-max-pod-grace-period": "600",
                 },
                 Restart: "always",
-                RestartSec: "5",
+                RestartSec: "10",
                 StartLimitInterval: "0",
               },
               Install: {
@@ -233,6 +238,19 @@ local filekey(path) = (
               },
             },
           },
+        },
+        unit("zz-default.network", hascontent=false) {
+          "drop-ins": [{
+            name: "50-garagecloud.conf",
+            content: std.manifestIni(self.content_),
+            content_:: {
+              sections: {
+                Network: {
+                  IPv6AcceptRA: "true",
+                },
+              },
+            },
+          }],
         },
         unit("create-swapfile.service") {
           content_:: {
@@ -272,6 +290,28 @@ local filekey(path) = (
               },
               Install: {
                 WantedBy: "swap.target",
+              },
+            },
+          },
+        },
+        unit("losetup@.service") {
+          runtime: false,
+          content_:: {
+            sections: {
+              Unit: {
+                Description: "Loopback device for %f",
+                DefaultDependencies: "no",
+                RequiresMountsFor: "%f",
+                Conflicts: "umount.target",
+              },
+              Service: {
+                Type: "oneshot",
+                RemainAfterExit: "yes",
+                ExecStart: "/usr/sbin/losetup --direct-io=on --find %f",
+                ExecStop: "/usr/sbin/losetup --detach %f",
+              },
+              Install: {
+                WantedBy: "local-fs.target",
               },
             },
           },
@@ -321,11 +361,11 @@ local filekey(path) = (
         set linux_append="$linux_append systemd.unified_cgroup_hierarchy=1"
       |||
       ),
-      file("/run/systemd/network/zz-default.network.d/garagecloud.conf",
+      file("/etc/systemd/system.conf.d/garagecloud.conf",
         std.manifestIni({
           sections: {
-            Network: {
-              IPv6AcceptRA: "true",
+            Manager: {
+              RuntimeWatchdogSec: "20s",
             },
           },
         })),
@@ -398,6 +438,11 @@ local filekey(path) = (
             },
           },
         })),
+      file("/etc/udev/rules.d/20-looppath.rules", |||
+        # loop
+        KERNEL=="loop[0-9]*", ATTRS{loop/backing_file}=="?*", PROGRAM="/bin/sh -c 'echo %s{loop/backing_file} | tr / -'", ENV{ID_PATH}="loop$result", OPTIONS+="string_escape=replace"
+      |||
+      ),
     ],
   },
 
@@ -427,7 +472,7 @@ local filekey(path) = (
           tolerations+: utils.toleratesMaster,
           priorityClassName: "system-node-critical",
           hostNetwork: true,
-          terminationGracePeriodSeconds: 0,
+          terminationGracePeriodSeconds: 1,
           initContainers_+: {
             copy: utils.shcmd("copy") {
               shcmd: "cp /config/user_data /dest/",
