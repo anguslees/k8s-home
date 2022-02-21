@@ -26,11 +26,11 @@ local host = "restic.oldmacdonald.farm";
       usages: ["digital signature", "key encipherment"],
       dnsNames: [host],
       secretName: "ingress-tls",
-      keyAlgorithm: "ecdsa",
       duration_h_:: 365 * 24 / 4, // 3 months
       duration: "%dh" % self.duration_h_,
       renewBefore_h_:: self.duration_h_ / 3,
       renewBefore: "%dh" % self.renewBefore_h_,
+      privateKey: {algorithm: "ECDSA"},
     },
   },
 
