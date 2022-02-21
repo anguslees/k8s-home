@@ -352,11 +352,11 @@ local issuerRef(issuer) = {
         usages: ["digital signature", "key encipherment"],
         commonName: this.metadata.name,
         secretName: this.metadata.name,
-        keyAlgorithm: "ecdsa",
         duration_h_:: 365 * 24 / 4, // 3 months
         duration: "%dh" % self.duration_h_,
         renewBefore_h_:: self.duration_h_ / 3,
         renewBefore: "%dh" % self.renewBefore_h_,
+        privateKey: {algorithm: "ECDSA"},
       },
 
       // Fake Secret, used to represent the _real_ cert Secret to jsonnet
