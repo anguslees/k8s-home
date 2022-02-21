@@ -25,8 +25,8 @@ local path_join(prefix, suffix) = (
           host: host,
           http: {
             paths: [
-              {path: this.prom_path, backend: $.prometheus.svc.name_port},
-              {path: this.am_path, backend: $.alertmanager.svc.name_port},
+              {path: this.prom_path, backend: $.prometheus.svc.name_port, pathType: "Prefix"},
+              {path: this.am_path, backend: $.alertmanager.svc.name_port, pathType: "Prefix"},
             ],
           },
         },
