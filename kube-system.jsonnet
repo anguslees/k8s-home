@@ -1036,11 +1036,25 @@ local CA(name, namespace, issuer) = {
       subjects_+: [$.checkpointer.sa],
     },
 
+    saToken: kube.Secret("pod-checkpointer-token") + $.namespace {
+      metadata+: {
+        annotations+: {
+          "kubernetes.io/service-account.name": $.checkpointer.sa.metadata.name,
+        },
+      },
+      type: "kubernetes.io/service-account-token",
+    },
+
     deploy: kube.DaemonSet("pod-checkpointer") + $.namespace {
       spec+: {
         template+: checkpoint {
           spec+: {
-            serviceAccountName: $.checkpointer.sa.metadata.name,
+            // Note: avoid using projected serviceaccount tokens -
+            // pod-checkpointer does not know how to checkpoint them.
+            // TODO: this pod should probably use kubelet
+            // credentials, but last time I tried they were not
+            // sufficient (?)
+            automountServiceAccountToken: false,
             hostNetwork: true,
             tolerations+: utils.toleratesMaster + bootstrapTolerations,
             // Moved to a nodeAffinity rule, to workaround a limitation
@@ -1060,9 +1074,10 @@ local CA(name, namespace, issuer) = {
               },
             },
             volumes_+: {
+              etc_k8s: kube.HostPathVolume("/etc/kubernetes", "Directory"),
               kubeconfig: kube.ConfigMapVolume($.kubeconfig_in_cluster),
-              etc_k8s: kube.HostPathVolume("/etc/kubernetes"),
-              var_run: kube.HostPathVolume("/run"), // TODO: expose only /run/containerd/containerd.sock and lock path
+              token: kube.SecretVolume($.checkpointer.saToken),
+              var_run: kube.HostPathVolume("/run", "Directory"), // TODO: expose only /run/containerd/containerd.sock and lock path
             },
             containers_+: {
               checkpointer: kube.Container("checkpointer") {
@@ -1081,7 +1096,14 @@ local CA(name, namespace, issuer) = {
                   GOGC: "25",
                 },
                 volumeMounts_+: {
-                  kubeconfig: {mountPath: "/etc/checkpointer"},
+                  kubeconfig: {
+                    mountPath: "/etc/checkpointer",
+                    readOnly: true,
+                  },
+                  token: {
+                    mountPath: "/var/run/secrets/kubernetes.io/serviceaccount",
+                    readOnly: true,
+                  },
                   etc_k8s: {mountPath: "/etc/kubernetes"},
                   var_run: {mountPath: "/var/run"},
                 },
