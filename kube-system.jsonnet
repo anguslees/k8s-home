@@ -546,6 +546,7 @@ local CA(name, namespace, issuer) = {
                 },
                 livenessProbe: {
                   httpGet: {path: "/healthz", port: 10256, scheme: "HTTP"},
+                  timeoutSeconds: 10,
                   failureThreshold: 3,
                 },
               },
