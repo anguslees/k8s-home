@@ -32,7 +32,9 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
             nodename: "__KUBERNETES_NODE_NAME__",
             mtu: mtu,
             ipam: {
-              type: "calico-ipam"
+              type: "calico-ipam",
+              assign_ipv4: "true",
+              assign_ipv6: "true",
               //type: "host-local",
               //ranges: [[{subnet: "usePodCidr"}]],
               // Clear out ipam state on reboot.  Pods are restarted
@@ -162,12 +164,12 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
         {
           apiGroups: ["crd.projectcalico.org"],
           resources: ["blockaffinities", "ipamblocks", "ipamhandles"],
-          verbs: ["get", "list", "create", "update", "delete"],
+          verbs: ["get", "list", "watch", "create", "update", "delete"],
         },
         {
           apiGroups: ["crd.projectcalico.org"],
           resources: ["hostendpoints"],
-          verbs: ["get", "list", "create", "update", "delete"],
+          verbs: ["get", "list", "watch", "create", "update", "delete"],
         },
         {
           apiGroups: ["crd.projectcalico.org"],
@@ -400,12 +402,12 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
                   requests: {cpu: "100m", memory: "160Mi"},
                 },
                 readinessProbe: {
-                  exec: {
-                    command: ["/bin/calico-node", "-felix-live", "-bird-live"],
-                  },
+                  httpGet: {path: "/readiness", host: "127.0.0.1", port: 9099, scheme: "HTTP"},
+                  timeoutSeconds: 10,
                   periodSeconds: 30,
                 },
                 livenessProbe: self.readinessProbe {
+                  httpGet+: {path: "/liveness"},
                   initialDelaySeconds: 10,
                   failureThreshold: 6,
                 },

@@ -26,9 +26,7 @@
   },
 
   ipfs: import "ipfs.jsonnet",
-  docker_ipfs: (import "docker-ipfs.jsonnet") {
-    ipfsSvc: $.ipfs.svc,
-  },
+  docker_ipfs: import "docker-ipfs.jsonnet",
 
   rook_ceph_system: import "rook-ceph-system.jsonnet",
   rook_ceph: (import "rook-ceph.jsonnet") {

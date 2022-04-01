@@ -5,18 +5,17 @@ local kubecfg = import "kubecfg.libsonnet";
 local email = "guslees+letsencrypt@gmail.com";
 
 // renovate: depName=cert-manager datasource=helm versioning=semver
-local chartVersion = "1.5.3";
-local chartUrl = "https://charts.jetstack.io/charts/cert-manager-v%s.tgz" % chartVersion;
+local chartData = importbin "https://charts.jetstack.io/charts/cert-manager-v1.5.3.tgz";
 
 {
   namespace:: {metadata+: {namespace: "cert-manager"}},
 
   ns: kube.Namespace($.namespace.metadata.namespace),
 
-  chart: kubecfg.helmTemplate(
+  chart: kubecfg.parseHelmChart(
+    chartData,
     "cert-manager",
     $.namespace.metadata.namespace,
-    chartUrl,
     {
       global: {
         leaderElection: {namespace: $.namespace.metadata.namespace},

@@ -9,18 +9,22 @@ local image = "quay.io/bitnami/sealed-secrets-controller:v0.5.1"; // renovate
 
   crd: kube.CustomResourceDefinition("bitnami.com", "v1alpha1", "SealedSecret") {
     spec+: {
-      validation+: {
-        openAPIV3Schema: {
-          "$schema": "http://json-schema.org/draft-04/schema#",
-          type: "object",
-          description: "A sealed (encrypted) Secret",
-          properties: {
-            spec: {
+      versions_+: {
+        v1alpha1+: {
+          schema: {
+            openAPIV3Schema: {
+              "$schema": "http://json-schema.org/draft-04/schema#",
               type: "object",
+              description: "A sealed (encrypted) Secret",
               properties: {
-                data: {
-                  type: "string",
-                  pattern: "^[A-Za-z0-9+/=]*$", // base64
+                spec: {
+                  type: "object",
+                  properties: {
+                    data: {
+                      type: "string",
+                      pattern: "^[A-Za-z0-9+/=]*$", // base64
+                    },
+                  },
                 },
               },
             },

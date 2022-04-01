@@ -2,10 +2,17 @@ local kube = import "kube.libsonnet";
 local utils = import "utils.libsonnet";
 local rookCephSystem = import "rook-ceph-system.jsonnet";
 
-local arch = "amd64";
+// Note comment in https://github.com/rook/rook/issues/6849:
+// For the time being, stick with v14.2.12 or v15.2.7, and once Rook
+// 1.6 is released, upgrade to at least v14.2.14 or v15.2.9 to get
+// partitions working again. As of 1.6, Rook OSD's implementation for
+// simple scenarios (one OSD = one disk basically) is not using LVM
+// but RAW mode from ceph-volume. See ceph: add raw mode for non-pvc
+// osd #4879 for more details.
 
 // https://hub.docker.com/r/ceph/ceph/tags
-local cephVersion = "v14.2.6-20200115";
+// renovate: depName=ceph/ceph datasource=docker
+local cephVersion = "v14.2.12";
 
 {
   namespace:: {metadata+: {namespace: "rook-ceph"}},
@@ -30,102 +37,27 @@ local cephVersion = "v14.2.6-20200115";
     },
   },
 
-  mgrSa: kube.ServiceAccount("rook-ceph-mgr") + $.namespace,
-
-  osdRole: kube.Role("rook-ceph-osd") + $.namespace {
-    rules: [
-      {
-        apiGroups: [""],
-        resources: ["configmaps"],
-        verbs: ["get", "list", "watch", "create", "update", "delete"],
-      },
-    ],
-  },
-
-  osdSa: kube.ServiceAccount("rook-ceph-osd") + $.namespace,
-
-  osdRoleBinding: kube.RoleBinding("rook-ceph-osd") + $.namespace {
-    roleRef_: $.osdRole,
-    subjects_+: [$.osdSa],
-  },
-
-  reporterSa: kube.ServiceAccount("rook-ceph-cmd-reporter") + $.namespace,
-
-  reporterRole: kube.Role("rook-ceph-cmd-reporter") + $.namespace {
-    rules: [
-      {
-        apiGroups: [""],
-        resources: ["pods", "configmaps"],
-        verbs: ["get", "list", "watch", "create", "update", "delete"],
-      },
-    ],
-  },
-
-  reporterRoleBinding: kube.RoleBinding("rook-ceph-cmd-reporter") + $.namespace {
-    roleRef_: $.reporterRole,
-    subjects_+: [$.reporterSa],
-  },
-
-  mgrRole: kube.Role("rook-ceph-mgr") + $.namespace {
-    rules: [
-      {
-        apiGroups: [""],
-        resources: ["pods", "services"],
-        verbs: ["get", "list", "watch"],
-      },
-      {
-        apiGroups: ["batch"],
-        resources: ["jobs"],
-        verbs: ["get", "list", "watch", "create", "update", "delete"],
-      },
-      {
-        apiGroups: ["ceph.rook.io"],
-        resources: ["*"],
-        verbs: ["*"],
-      },
-    ],
-  },
-
-  mgrClusterRole: kube.ClusterRole("rook-ceph-mgr-cluster") {
-    metadata+: {
-      labels+: {operator: "rook", "storage-backend": "ceph"},
-    },
-    rules: [
-      {
-        apiGroups: [""],
-        resources: ["configmaps", "nodes", "nodes/proxy"],
-        verbs: ["get", "list", "watch"],
-      },
-    ],
-  },
-
-  mgrSystemBinding: kube.RoleBinding("rook-ceph-mgr-system") + $.namespace {
-    roleRef_: rookCephSystem.mgrSystemRole,
-    subjects_+: [$.mgrSa],
-  },
-
-  mgrClusterRoleBinding: kube.ClusterRoleBinding("rook-ceph-mgr-cluster") {
-    roleRef_: $.mgrClusterRole,
-    subjects_+: [$.mgrSa],
-  },
-
-  mgrBinding: kube.RoleBinding("rook-ceph-mgr") + $.namespace {
-    roleRef_: $.mgrRole,
-    subjects_+: [$.mgrSa],
-  },
-
-  // Allow operator to create resources in this namespace too.
-  cephClusterMgmtBinding: kube.RoleBinding("rook-ceph-cluster-mgmt") + $.namespace {
-    roleRef_: rookCephSystem.cephClusterMgmt,
-    subjects_+: [rookCephSystem.sa],
-  },
-
   cluster: rookCephSystem.CephCluster("rook-ceph") + $.namespace {
     spec+: {
       // NB: Delete contents of this dir if recreating Cluster
       dataDirHostPath: "/var/lib/rook",
       cephVersion: {
         image: "ceph/ceph:" + cephVersion,
+      },
+      disruptionManagement: {
+        managePodBudgets: true,
+        osdMaintenanceTimeout: 60, // minutes; default=30
+      },
+      //removeOSDsIfOutAndSafeToRemove: true,
+      healthCheck: {
+        livenessProbe: {
+          osd: {
+            probe: {
+              timeoutSeconds: 10, // default 1s
+              periodSeconds: 30, // default 10s
+            },
+          },
+        },
       },
       mon: {
         count: 3,
@@ -160,19 +92,67 @@ local cephVersion = "v14.2.6-20200115";
           nodeAffinity: {
             requiredDuringSchedulingIgnoredDuringExecution: {
               nodeSelectorTerms+: [{
-                matchExpressions: [
-                  {key: kv[0], operator: "In", values: [kv[1]]}
-                  for kv in kube.objectItems(utils.archSelector(arch))
-                ],
+                matchExpressions: [{
+                  key: "kubernetes.io/arch",
+                  operator: "In",
+                  // TODO: Upstream images support arm64/v8 too
+                  values: std.set(["amd64"]),
+                }],
               }],
             },
           },
         },
       },
       storage: {
-        useAllNodes: true,
+        useAllNodes: false,
         useAllDevices: false,
-        directories: [{path: "/var/lib/rook"}],
+        //directories: [{path: "/var/lib/rook"}],
+        nodes_:: {
+          //name: {devices: []}
+        },
+        nodes: kube.mapToNamedList(self.nodes_),
+        storageClassDeviceSets_:: {
+          set1: {
+            count: 3,
+            portable: false,
+            tuneDeviceClass: true,
+            placement: {
+              podAntiAffinity: {
+                local selector = {
+                  app: "rook-ceph-osd",
+                  rook_cluster: "rook-ceph",
+                },
+                preferredDuringSchedulingIgnoredDuringExecution: [
+                  {
+                    weight: 100,
+                    podAffinityTerm: {
+                      labelSelector: selector,
+                      topologyKey: "kubernetes.io/hostname",
+                    },
+                  },
+                  {
+                    weight: 100,
+                    podAffinityTerm: {
+                      labelSelector: selector,
+                      topologyKey: "topology.kubernetes.io/zone",
+                    },
+                  },
+                ],
+              },
+            },
+            volumeClaimTemplates: [{
+              metadata: {name: "data"},
+              spec: {
+                resources: {requests: {storage: "9Gi"}},
+                storageClassName: "local-disk",
+                volumeMode: "Block",
+                accessModes: ["ReadWriteOnce"],
+              },
+            }],
+          },
+        },
+        // FIXME: re-enable in newer rook
+        storageClassDeviceSets: kube.mapToNamedList(self.storageClassDeviceSets_),
       },
     },
   },
@@ -193,36 +173,16 @@ local cephVersion = "v14.2.6-20200115";
         http: {
           paths: [{
             path: "/",
+            pathType: "Prefix",
             backend: {
-              serviceName: "rook-ceph-mgr-dashboard",
-              servicePort: "https-dashboard",
+              service: {
+                name: "rook-ceph-mgr-dashboard",
+                port: {name: "https-dashboard"},
+              },
             },
           }],
         },
       }],
-    },
-  },
-
-  // These are not defined upstream, but should be (imo).
-  // https://github.com/rook/rook/issues/2128
-  monDisruptionBudget: kube.PodDisruptionBudget("rook-ceph-mon") + $.namespace {
-    spec+: {
-      minAvailable:: null,
-      maxUnavailable: 1,
-      selector: {matchLabels: {app: "rook-ceph-mon"}},
-    },
-  },
-  mdsDisruptionBudget: kube.PodDisruptionBudget("rook-ceph-mds") + $.namespace {
-    spec+: {
-      minAvailable: 1,
-      selector: {matchLabels: {app: "rook-ceph-mds"}},
-    },
-  },
-  osdDisruptionBudget: kube.PodDisruptionBudget("rook-ceph-osd") + $.namespace {
-    spec+: {
-      minAvailable:: null,
-      maxUnavailable: 1,  // not true _after_ re-replication has taken place..
-      selector: {matchLabels: {app: "rook-ceph-osd"}},
     },
   },
 
@@ -244,7 +204,7 @@ local cephVersion = "v14.2.6-20200115";
   },
 
   blockCsi: kube.StorageClass("csi-ceph-block") {
-    provisioner: rookCephSystem.cephSystem.metadata.namespace + ".rbd.csi.ceph.com",
+    provisioner: "rook-ceph-system.rbd.csi.ceph.com",
     parameters: {
       clusterID: $.cluster.metadata.namespace,
       pool: $.replicapool.metadata.name,
@@ -269,6 +229,9 @@ local cephVersion = "v14.2.6-20200115";
       metadataServer: {
         activeCount: 1,
         activeStandby: true,
+        resources: {
+          requests: {cpu: "100m", "memory": "128Mi"},
+        },
         placement: {
           podAntiAffinity: {
             local selector = {
@@ -298,7 +261,7 @@ local cephVersion = "v14.2.6-20200115";
   },
 
   cephfsCsi: kube.StorageClass("csi-cephfs") {
-    provisioner: rookCephSystem.cephSystem.metadata.namespace + ".cephfs.csi.ceph.com",
+    provisioner: "rook-ceph-system.cephfs.csi.ceph.com",
     parameters: {
       clusterID: $.cluster.metadata.namespace,
       fsName: $.filesystem.metadata.name,
@@ -431,7 +394,7 @@ local cephVersion = "v14.2.6-20200115";
             },
             containers_+: {
               check: kube.Container("reboot-check") {
-                image: rookCephSystem.deploy.spec.template.spec.containers_.operator.image,
+                image: rookCephSystem.operatorImage,
                 command: ["/scripts/status-check.sh"],
                 env_+: {
                   ROOK_ADMIN_SECRET: {

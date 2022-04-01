@@ -34,7 +34,7 @@ local kubecfg = import "kubecfg.libsonnet";
           "local-disk": {
             hostDir: "/mnt/disks",
             mountDir: self.hostDir,
-            volumeMode: "Filesystem",
+            volumeMode: "Block",
             fsType: "ext4",
             namePattern: "*",
             //blockCleanerCommand: ["/scripts/shred.sh", "2"],

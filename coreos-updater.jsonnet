@@ -19,8 +19,6 @@ local archNodeSelector(a) = {nodeSelector+: utils.archSelector(a)};
     metadata+: { namespace: "coreos-pxe-install" },
   },
 
-  ns: kube.Namespace($.namespace.metadata.namespace),
-
   serviceAccount: kube.ServiceAccount("update-agent") + $.namespace,
 
   updater_role: kube.ClusterRole("update-agent") {
