@@ -132,10 +132,9 @@ local issuerRef(issuer) = {
     local leaderElectRule(deploy) = {
       local container = deploy.spec.template.spec.containers_.default,
       local election_id = container.args_["election-id"],
-      local ingress_class = ({"ingress-class": "nginx"} + container.args_)["ingress-class"],
       apiGroups: [""],
       resources: ["configmaps"],
-      resourceNames: ["%s-%s" % [election_id, ingress_class]],
+      resourceNames: [election_id],
       verbs: ["get", "update"],
     },
 
@@ -185,6 +184,17 @@ local issuerRef(issuer) = {
     },
   },
 
+  class: kube.IngressClass("nginx") {
+    metadata+: {
+      annotations+: {
+        "ingressclass.kubernetes.io/is-default-class": "true",
+      },
+    },
+    spec+: {
+      controller: "k8s.io/ingress-nginx",
+    },
+  },
+
   controller: kube.Deployment("nginx-ingress-controller") + $.namespace {
     local this = self,
     spec+: {
@@ -229,7 +239,7 @@ local issuerRef(issuer) = {
           },
           containers_+: {
             default: kube.Container("nginx") {
-              image: "k8s.gcr.io/ingress-nginx/controller:v0.48.1", // renovate
+              image: "k8s.gcr.io/ingress-nginx/controller:v1.1.2", // renovate
               env_+: {
                 POD_NAME: kube.FieldRef("metadata.name"),
                 POD_NAMESPACE: kube.FieldRef("metadata.namespace"),
@@ -243,6 +253,8 @@ local issuerRef(issuer) = {
 
                 local fqname(o) = "%s/%s" % [o.metadata.namespace, o.metadata.name],
                 "default-backend-service": fqname($.defaultSvc),
+                "ingress-class": "nginx",
+                "controller-class": $.class.spec.controller,
                 configmap: fqname($.config),
                 "validating-webhook": ":8443",
                 "validating-webhook-certificate": "/webookcert/tls.crt",
@@ -304,6 +316,12 @@ local issuerRef(issuer) = {
     },
   },
 
+  classIntern: kube.IngressClass("nginx-internal") {
+    spec+: {
+      controller: "k8s.io/ingress-nginx-internal",
+    },
+  },
+
   controllerIntern: $.controller {
     metadata+: {name: super.name + "-internal"},
     spec+: {
@@ -315,6 +333,7 @@ local issuerRef(issuer) = {
                 local fqname(o) = "%s/%s" % [o.metadata.namespace, o.metadata.name],
 
                 "ingress-class": "nginx-internal",
+                "controller-class": $.classIntern.spec.controller,
 
                 "tcp-services-configmap": fqname($.tcpconfIntern),
                 "udp-services-configmap": fqname($.udpconfIntern),
@@ -340,7 +359,7 @@ local issuerRef(issuer) = {
       },
     },
 
-    selfSigner: certman.Issuer("selfsign") + $.namespace {
+    selfSigner: certman.Issuer("ingress-nginx-selfsign") + $.namespace {
       spec+: {selfSigned: {}},
     },
 
@@ -382,19 +401,19 @@ local issuerRef(issuer) = {
           matchPolicy: "Equivalent",
           rules: [{
             apiGroups: ["networking.k8s.io"],
-            apiVersions: ["v1beta1"],
+            apiVersions: ["v1"],
             operations: ["CREATE", "UPDATE"],
             resources: ["ingresses"],
           }],
           failurePolicy: "Ignore",
           sideEffects: "None",
-          admissionReviewVersions: ["v1", "v1beta1"],
+          admissionReviewVersions: ["v1"],
           clientConfig: {
             local s = $.webhook.service,
             service: {
               namespace: s.metadata.namespace,
               name: s.metadata.name,
-              path: "/networking/v1beta1/ingresses",
+              path: "/networking/v1/ingresses",
             },
           },
         },
