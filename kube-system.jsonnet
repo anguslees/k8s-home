@@ -510,12 +510,12 @@ local CA(name, namespace, issuer) = {
                 args_+: {
                   "kubeconfig": "/etc/kubernetes/kubeconfig.conf",
                   "proxy-mode": "ipvs",
-                  "cluster-cidr": std.split(clusterCidr, ",")[0], // FIXME: #91357
+                  "cluster-cidr": clusterCidr,
                   "hostname-override": "$(NODE_NAME)",
                   "metrics-bind-address": "$(POD_IP):10249",
                   "healthz-bind-address": "$(POD_IP):10256",
                   feature_gates_:: {
-                    IPv6DualStack: false,  // FIXME: change when #91357 is released
+                    IPv6DualStack: true,
                   },
                   "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
                 },
