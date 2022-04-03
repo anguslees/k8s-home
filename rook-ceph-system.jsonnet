@@ -6,7 +6,7 @@ local utils = import "utils.libsonnet";
 // -> https://github.com/rook/rook/pull/5660
 
 // renovate: depName=rook-ceph registryUrls=https://charts.rook.io/release
-local chartData = importbin "https://charts.rook.io/release/rook-ceph-v1.3.9.tgz";
+local chartData = importbin "https://charts.rook.io/release/rook-ceph-v1.4.9.tgz";
 
 local convertCrd(o) = o + {
   assert super.apiVersion == "apiextensions.k8s.io/v1beta1",
@@ -120,27 +120,12 @@ local convertCrd(o) = o + {
         },
       },
     } for o in super["rook-ceph/templates/deployment.yaml"]],
-    "rook-ceph/templates/resources.yaml": [
-      convertCrd(o) for o in super["rook-ceph/templates/resources.yaml"]
-    ],
-  } + {
-    [f]: [
-      o + {
-        [if o.apiVersion == "rbac.authorization.k8s.io/v1beta1" then "apiVersion"]: "rbac.authorization.k8s.io/v1",
-      } for o in super[f]
-    ]
-    for f in [
-      "rook-ceph/templates/clusterrole.yaml",
-      "rook-ceph/templates/clusterrolebinding.yaml",
-      "rook-ceph/templates/role.yaml",
-      "rook-ceph/templates/rolebinding.yaml",
-    ]
   },
 
   // Used by rook-ceph.system reboot scripts
   operatorImage:: $.chart["rook-ceph/templates/deployment.yaml"][0].spec.template.spec.containers[0].image,
 
-  local crds = {[c.spec.names.kind]: c for c in $.chart["rook-ceph/templates/resources.yaml"]},
+  local crds = {[c.spec.names.kind]: c for c in $.chart["rook-ceph/templates/resources.yaml"] if c != null},
   CephCluster:: utils.crdNew(crds.CephCluster, "v1"),
   CephFilesystem:: utils.crdNew(crds.CephFilesystem, "v1"),
   CephObjectStore:: utils.crdNew(crds.CephObjectStore, "v1"),

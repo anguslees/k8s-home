@@ -12,7 +12,7 @@ local rookCephSystem = import "rook-ceph-system.jsonnet";
 
 // https://hub.docker.com/r/ceph/ceph/tags
 // renovate: depName=ceph/ceph datasource=docker
-local cephVersion = "v14.2.12";
+local cephVersion = "v15.2.7";
 
 {
   namespace:: {metadata+: {namespace: "rook-ceph"}},
@@ -49,8 +49,14 @@ local cephVersion = "v14.2.12";
         osdMaintenanceTimeout: 60, // minutes; default=30
       },
       //removeOSDsIfOutAndSafeToRemove: true,
+      /* Fixed in rook 1.5? https://github.com/rook/rook/issues/6980
       healthCheck: {
         livenessProbe: {
+          mon: {
+            probe: {
+              timeoutSeconds: 10, // default 1s
+            },
+          },
           osd: {
             probe: {
               timeoutSeconds: 10, // default 1s
@@ -59,6 +65,7 @@ local cephVersion = "v14.2.12";
           },
         },
       },
+      */
       mon: {
         count: 3,
         allowMultiplePerNode: false,
