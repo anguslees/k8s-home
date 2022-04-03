@@ -6,76 +6,7 @@ local utils = import "utils.libsonnet";
 // -> https://github.com/rook/rook/pull/5660
 
 // renovate: depName=rook-ceph registryUrls=https://charts.rook.io/release
-local chartData = importbin "https://charts.rook.io/release/rook-ceph-v1.4.9.tgz";
-
-local convertCrd(o) = o + {
-  assert super.apiVersion == "apiextensions.k8s.io/v1beta1",
-  assert super.kind == "CustomResourceDefinition" : "kind is %s" % super.kind,
-  apiVersion: "apiextensions.k8s.io/v1",
-  [if std.objectHas(o.spec, "version") then "spec"]+: {
-    version:: null,
-    additionalPrinterColumns:: [],
-    validation:: null,
-    versions: [{
-      name: o.spec.version,
-      served: true,
-      storage: true,
-      [if std.objectHas(o.spec, "additionalPrinterColumns") then "additionalPrinterColumns"]: [
-        c + {
-          JSONPath:: null,
-          jsonPath: c.JSONPath,
-        }
-        for c in o.spec.additionalPrinterColumns
-      ],
-      schema: if std.objectHas(o.spec, "validation")
-      then o.spec.validation + {
-        local recurse(o) = {
-          nullable: true,
-          type: if "properties" in self then "object" else if "items" in self then "array" else "object",
-        } + o + {
-          [if "properties" in o then "properties"]: {
-            [k]: if k == "storageClassDeviceSets" then {
-              type: "array",
-              nullable: true,
-            } else recurse(o.properties[k])
-            for k in std.objectFields(o.properties)
-          },
-        },
-        openAPIV3Schema: recurse(super.openAPIV3Schema) { nullable: false },
-      }
-      else {
-        openAPIV3Schema: {
-          type: "object",
-          "x-kubernetes-preserve-unknown-fields": true,
-        },
-      },
-    }],
-  },
-} + {
-  local sspec = {
-    subresources: null,
-    additionalPrinterColumns: [],
-    validation: {
-      openAPIV3Schema: {
-        type: "object",
-        "x-kubernetes-preserve-unknown-fields": true,
-      },
-    },
-  } + super.spec,
-  spec+: {
-    versions: [{
-      subresources: sspec.subresources,
-      additionalPrinterColumns: [c + {
-        JSONPath:: null,
-        jsonPath: c.JSONPath,
-      } for c in sspec.additionalPrinterColumns],
-      schema: sspec.validation,
-    } + v for v in super.versions],
-    subresources:: null,
-    additionalPrinterColumns:: null,
-    validation:: null,
-  },
-};
+local chartData = importbin "https://charts.rook.io/release/rook-ceph-v1.5.12.tgz";
 
 {
   namespace:: {metadata+: {namespace: "rook-ceph"}},
@@ -85,7 +16,6 @@ local convertCrd(o) = o + {
     "rook-ceph",
     $.namespace.metadata.namespace,
     {
-      nodeSelector: {"kubernetes.io/arch": "amd64"},
       resources: {
         requests: {cpu: "100m", memory: "128Mi"},
       },
@@ -101,6 +31,8 @@ local convertCrd(o) = o + {
         mountSecurityMode: "Any",
       },
       enableSelinuxRelabeling: false,
+      pluginPriorityClassName: "system-node-critical",
+      provisionerPriorityClassName: "system-cluster-critical",
     },
   ) + {
     "rook-ceph/templates/deployment.yaml": [o + {
