@@ -715,7 +715,7 @@ local filekey(path) = (
           tolerations+: utils.toleratesMaster,
           containers_+: {
             httpd: kube.Container("httpd") {
-              image: "httpd:2.4.51-alpine", // renovate
+              image: "httpd:2.4.53-alpine", // renovate
               ports_+: {
                 http: { containerPort: 80 },
               },
