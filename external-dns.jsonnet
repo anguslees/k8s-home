@@ -172,7 +172,7 @@ local utils = import "utils.libsonnet";
           },
           containers_+: {
             default: kube.Container("extdns") {
-              image: "k8s.gcr.io/external-dns/external-dns:v0.10.2", // renovate
+              image: "k8s.gcr.io/external-dns/external-dns:v0.11.0", // renovate
               args_+: {
                 sources_:: ["ingress", "service"],
                 "domain-filter": "oldmacdonald.farm",
