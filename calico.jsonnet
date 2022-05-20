@@ -96,7 +96,10 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
   FelixConfiguration:: self.felixconfigCRD.new,
 
   globalnetpolicyCRD: kube.CustomResourceDefinition("crd.projectcalico.org", "v1", "GlobalNetworkPolicy") {
-    spec+: {scope: "Cluster"},
+    spec+: {
+      names+: {plural: "globalnetworkpolicies"},
+      scope: "Cluster",
+    },
   },
   GlobalNetworkPolicy:: self.globalnetpolicyCRD.new,
 
