@@ -72,6 +72,13 @@ local host = "restic.oldmacdonald.farm";
     },
   },
 
+  hpa: kube.HorizontalPodAutoscaler("rest-server") + $.namespace {
+    target: $.deploy,
+    spec+: {
+      maxReplicas: 5,
+    },
+  },
+
   deploy: kube.Deployment("rest-server") + $.namespace {
     spec+: {
       template+: utils.PromScrape(8000) {
@@ -103,11 +110,13 @@ local host = "restic.oldmacdonald.farm";
               resources: {
                 requests: {cpu: "10m", memory: "25Mi"},
               },
-              readinessProbe: {
+              livenessProbe: {
                 tcpSocket: {port: "http"}, // FIXME
                 //httpGet: {path: "/config", port: "http"},
+                failureThreshold: 3,
+                timeoutSeconds: 10,
               },
-              livenessProbe: self.readinessProbe,
+              readinessProbe: self.livenessProbe,
             },
           },
         },
