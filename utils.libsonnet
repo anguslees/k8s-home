@@ -114,12 +114,6 @@ local kube = import "kube.libsonnet";
     local scheme = if std.length(this.spec.tls) > 0 then "https" else "http",
     url:: "%s://%s/" % [scheme, self.host],
 
-    metadata+: {
-      annotations+: {
-        "kubernetes.io/ingress.class": this.spec.ingressClassName, // TODO: legacy, remove
-      },
-    },
-
     spec+: {
       ingressClassName: "nginx-internal",
       tls: [],
