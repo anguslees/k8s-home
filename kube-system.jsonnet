@@ -30,14 +30,16 @@ local dnsDomain = "cluster.local";
 // NB: these IPs are also burnt into the peer/server certificates,
 // because of the golang TLS verification wars.
 local etcdMembers = {
-  "fc4698cdc1184810a2c3447a7ee66689": "192.168.0.129",  // etcd-0 - Red HP
+  "b4c71f92c2214edb97a4a11e17482a01": "192.168.0.176", // etcd-2 - Dell optiplex
+  // Flaky
+  //"fc4698cdc1184810a2c3447a7ee66689": "192.168.0.129",  // etcd-0 - Red HP
   // Dead
   //"0b5642a6cc18493d81a606483d9cbb7b": "192.168.0.132",  // etcd-1 - Red Lenovo
   "887f1b514ea54520a61643163d427d42": "192.168.0.161",  // etcd-2 - Old tower
   "765885d83e774555bc7ee0f9c6fc1178": "192.168.0.117",  // etcd-1 - Dell silver/stickers (new)
   "6751cbb9e81a4a928510cec6eec02a78": "192.168.0.102",  // etcd-3 - Lenovo T530
 };
-local etcdLearners = std.set(["887f1b514ea54520a61643163d427d42"]);
+local etcdLearners = std.set(["b4c71f92c2214edb97a4a11e17482a01"]);
 
 local isolateMasters = false;
 
