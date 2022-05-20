@@ -6,7 +6,7 @@ local utils = import "utils.libsonnet";
 // -> https://github.com/rook/rook/pull/5660
 
 // renovate: depName=rook-ceph registryUrls=https://charts.rook.io/release
-local chartData = importbin "https://charts.rook.io/release/rook-ceph-v1.5.12.tgz";
+local chartData = importbin "https://charts.rook.io/release/rook-ceph-v1.6.11.tgz";
 
 {
   namespace:: {metadata+: {namespace: "rook-ceph"}},
@@ -32,14 +32,13 @@ local chartData = importbin "https://charts.rook.io/release/rook-ceph-v1.5.12.tg
       },
       enableSelinuxRelabeling: false,
       pluginPriorityClassName: "system-node-critical",
-      provisionerPriorityClassName: "system-cluster-critical",
+      provisionerPriorityClassName: "high",
     },
   ) + {
     "rook-ceph/templates/deployment.yaml": [o + {
       spec+: {
         template+: {
           spec+: {
-            priorityClassName: "high",
             containers: [
               if c.name == "rook-ceph-operator" then c + {
                 env+: [
@@ -52,10 +51,14 @@ local chartData = importbin "https://charts.rook.io/release/rook-ceph-v1.5.12.tg
         },
       },
     } for o in super["rook-ceph/templates/deployment.yaml"]],
+  } + {
+    "rook-ceph/templates/resources.yaml": [o + {
+      spec+: {
+        // https://github.com/rook/rook/issues/7659
+        preserveUnknownFields: false,
+      },
+    } for o in super["rook-ceph/templates/resources.yaml"]],
   },
-
-  // Used by rook-ceph.system reboot scripts
-  operatorImage:: $.chart["rook-ceph/templates/deployment.yaml"][0].spec.template.spec.containers[0].image,
 
   local crds = {[c.spec.names.kind]: c for c in $.chart["rook-ceph/templates/resources.yaml"] if c != null},
   CephCluster:: utils.crdNew(crds.CephCluster, "v1"),

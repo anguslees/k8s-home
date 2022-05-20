@@ -2,18 +2,6 @@ local kube = import "kube.libsonnet";
 local utils = import "utils.libsonnet";
 local rookCephSystem = import "rook-ceph-system.jsonnet";
 
-// Note comment in https://github.com/rook/rook/issues/6849:
-// For the time being, stick with v14.2.12 or v15.2.7, and once Rook
-// 1.6 is released, upgrade to at least v14.2.14 or v15.2.9 to get
-// partitions working again. As of 1.6, Rook OSD's implementation for
-// simple scenarios (one OSD = one disk basically) is not using LVM
-// but RAW mode from ceph-volume. See ceph: add raw mode for non-pvc
-// osd #4879 for more details.
-
-// https://hub.docker.com/r/ceph/ceph/tags
-// renovate: depName=ceph/ceph datasource=docker
-local cephVersion = "v15.2.7";
-
 {
   namespace:: {metadata+: {namespace: "rook-ceph"}},
   ns: kube.Namespace($.namespace.metadata.namespace),
@@ -22,50 +10,58 @@ local cephVersion = "v15.2.7";
   // then (eventually) ends up as ceph.conf everywhere.
   configOverride: kube.ConfigMap("rook-config-override") + $.namespace {
     data+: {
-      config: |||
-        [global]
-        # Avoid mon sync DoSing the sync source https://tracker.ceph.com/issues/42830
-        mon sync max payload size = 4096
-        # Default of 0.05 is too aggressive for my cluster. (seconds)
-        mon clock drift allowed = 0.1
-        # K8s image-gc-low-threshold is 80% - not much point warning
-        # before that point. (percent)
-        # Really, this should align with {nodefs,imagefs}.available
-        # soft limit, and allow absolute size, not just ratio.
-        mon data avail warn = 10
-      |||,
+      config_:: {
+        sections: {
+          global: {
+            // Avoid mon sync DoSing the sync source
+            // https://tracker.ceph.com/issues/42830
+            "mon sync max payload size": "4096",
+            // Default of 0.05 is too aggressive for my cluster. (seconds)
+            "mon clock drift allowed": "0.1",
+            // K8s image-gc-low-threshold is 80% - not much point warning
+            // before that point. (percent)
+            // Really, this should align with {nodefs,imagefs}.available
+            // soft limit, and allow absolute size, not just ratio.
+            "mon data avail warn": "10",
+          },
+        },
+      },
+      config: std.manifestIni(self.config_),
     },
   },
 
   cluster: rookCephSystem.CephCluster("rook-ceph") + $.namespace {
     spec+: {
+      // Note comment in https://github.com/rook/rook/issues/6849:
+      // For the time being, stick with v14.2.12 or v15.2.7, and once Rook
+      // 1.6 is released, upgrade to at least v14.2.14 or v15.2.9 to get
+      // partitions working again. As of 1.6, Rook OSD's implementation for
+      // simple scenarios (one OSD = one disk basically) is not using LVM
+      // but RAW mode from ceph-volume. See ceph: add raw mode for non-pvc
+      // osd #4879 for more details.
+      cephVersion: {
+        image: "ceph/ceph:v15.2.13", // renovate
+      },
       // NB: Delete contents of this dir if recreating Cluster
       dataDirHostPath: "/var/lib/rook",
-      cephVersion: {
-        image: "ceph/ceph:" + cephVersion,
-      },
       disruptionManagement: {
         managePodBudgets: true,
         osdMaintenanceTimeout: 60, // minutes; default=30
       },
       //removeOSDsIfOutAndSafeToRemove: true,
-      /* Fixed in rook 1.5? https://github.com/rook/rook/issues/6980
       healthCheck: {
-        livenessProbe: {
+        daemonHealth: {
           mon: {
-            probe: {
-              timeoutSeconds: 10, // default 1s
-            },
+            disabled: false,
+            timeout: "10s", // default 1s
           },
           osd: {
-            probe: {
-              timeoutSeconds: 10, // default 1s
-              periodSeconds: 30, // default 10s
-            },
+            disabled: false,
+            interval: "30s", // default 10s
+            timeout: "10s", // default 1s
           },
         },
       },
-      */
       mon: {
         count: 3,
         allowMultiplePerNode: false,
@@ -81,20 +77,37 @@ local cephVersion = "v15.2.7";
           requests: {memory: "400Mi", cpu: "100m"},
         },
       },
+      /*
       osd: {
         resources: {
           requests: {memory: "400Mi", cpu: "100m"},
         },
       },
+      */
       dashboard: {
         enabled: true,
         port: 8443,
         ssl: true,
       },
+      monitoring: {
+        enabled: false, // Needs prometheus rules CRDs
+      },
       network: {
         hostNetwork: false,
+        dualStack: true,
       },
       placement: {
+        /* TODO: crashes kubecfg.  Understand why.
+           I think it looks up schema for 'all' and gets nil, which later crashes
+```
+strategicpatch/patch.go: handleMapDiff(...) {
+        // ...
+
+	subschema, patchMeta, err := schema.LookupPatchMetadataForStruct(key)
+        // ^ returns PatchMetaFromOpenAPI{Schema: nil}, nil(?), nil for key="all"
+
+```
+
         all: {
           nodeAffinity: {
             requiredDuringSchedulingIgnoredDuringExecution: {
@@ -109,6 +122,7 @@ local cephVersion = "v15.2.7";
             },
           },
         },
+*/
       },
       storage: {
         useAllNodes: false,
@@ -120,7 +134,7 @@ local cephVersion = "v15.2.7";
         nodes: kube.mapToNamedList(self.nodes_),
         storageClassDeviceSets_:: {
           set1: {
-            count: 3,
+            count: 4,
             portable: false,
             tuneDeviceClass: true,
             placement: {
@@ -211,7 +225,8 @@ local cephVersion = "v15.2.7";
   },
 
   blockCsi: kube.StorageClass("csi-ceph-block") {
-    provisioner: "rook-ceph-system.rbd.csi.ceph.com",
+    provisioner: "rook-ceph.rbd.csi.ceph.com",
+    allowVolumeExpansion: true,
     parameters: {
       clusterID: $.cluster.metadata.namespace,
       pool: $.replicapool.metadata.name,
@@ -220,6 +235,8 @@ local cephVersion = "v15.2.7";
 
       "csi.storage.k8s.io/provisioner-secret-name": "rook-csi-rbd-provisioner",
       "csi.storage.k8s.io/provisioner-secret-namespace": self.clusterID,
+      "csi.storage.k8s.io/controller-expand-secret-name": "rook-csi-rbd-provisioner",
+      "csi.storage.k8s.io/controller-expand-secret-namespace": self.clusterID,
       "csi.storage.k8s.io/node-stage-secret-name": "rook-csi-rbd-node",
       "csi.storage.k8s.io/node-stage-secret-namespace": self.clusterID,
 
@@ -237,7 +254,7 @@ local cephVersion = "v15.2.7";
         activeCount: 1,
         activeStandby: true,
         resources: {
-          requests: {cpu: "100m", "memory": "128Mi"},
+          requests: {cpu: "100m", memory: "128Mi"},
         },
         placement: {
           podAntiAffinity: {
@@ -268,13 +285,16 @@ local cephVersion = "v15.2.7";
   },
 
   cephfsCsi: kube.StorageClass("csi-cephfs") {
-    provisioner: "rook-ceph-system.cephfs.csi.ceph.com",
+    provisioner: "rook-ceph.cephfs.csi.ceph.com",
+    allowVolumeExpansion: true,
     parameters: {
       clusterID: $.cluster.metadata.namespace,
       fsName: $.filesystem.metadata.name,
       pool: self.fsName + "-data0",
       "csi.storage.k8s.io/provisioner-secret-name": "rook-csi-cephfs-provisioner",
       "csi.storage.k8s.io/provisioner-secret-namespace": self.clusterID,
+      "csi.storage.k8s.io/controller-expand-secret-name": "rook-csi-cephfs-provisioner",
+      "csi.storage.k8s.io/controller-expand-secret-namespace": self.clusterID,
       "csi.storage.k8s.io/node-stage-secret-name": "rook-csi-cephfs-node",
       "csi.storage.k8s.io/node-stage-secret-namespace": self.clusterID,
     },
@@ -401,7 +421,7 @@ local cephVersion = "v15.2.7";
             },
             containers_+: {
               check: kube.Container("reboot-check") {
-                image: rookCephSystem.operatorImage,
+                image: "rook/ceph-toolbox:master", // renovate
                 command: ["/scripts/status-check.sh"],
                 env_+: {
                   ROOK_ADMIN_SECRET: {
