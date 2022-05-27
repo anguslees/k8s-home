@@ -50,7 +50,7 @@ configmaps* as node bootstrapper)
 
 #RELEASE="$(curl -sSL https://dl.k8s.io/release/stable.txt)"
 RELEASE=v1.12.5
-curl -L --remote-name-all https://storage.googleapis.com/kubernetes-release/release/${RELEASE}/bin/linux/amd64/kubeadm
+curl -L --remote-name-all https://dl.k8s.io/release/${RELEASE}/bin/linux/amd64/kubeadm
 
 Get new token: (with cluster-admin, this works with current kubeadm)
  `KUBECONFIG=$HOME/.kube/homeconf kubeadm token create --ttl 12h --print-join-command`
@@ -197,12 +197,26 @@ discussion.
 Add to known members:
 kubectl -n kube-system edit configmap etcd
 kubectl -n kube-system exec $existing_etcd_pod -- \
-  env ETCDCTL_API=3 \
   etcdctl member add $name --peer-urls=https://<pod ip>:2380
 
 **** Replacement of failed node:
 - Careful when changing! StatefulSets don't (yet) support
   updateStrategy.minAvailable, so 1x failed + 1x updating can lead to 2 down.
+
+- Delete the dead node, it isn't coming back.
+  kubectl delete node $node
+
+- Remove the dead member, it isn't coming back.
+  kubectl -n kube-system exec $existing_etcd_pod -- \
+  etcdctl member list
+  kubectl -n kube-system exec $existing_etcd_pod -- \
+  etcdctl member remove $memberid
+
+- Promote learner/spare.
+  kubectl -n kube-system exec $existing_etcd_pod -- \
+  etcdctl member promote $learnerid
+
+- Update etcd k8s config to add a new etcd learner.
 
 ***** What I did:
 - Add to etcdMembers. Push.
@@ -314,3 +328,14 @@ kubeadm-arm-v1.11.10: QmaZ5cnybq5jPdjGk4Anght9xSoch1ExFfm2JQu49NBDPw
 3. yolo manual delete of kube-dns svc, bring up coredns svc, check, delete
    kube-dns deploy
 4. ./coreos-update-all.sh
+
+** cluster-admin cert expiry
+
+Now that cert-manager is rotating cluster-admin certs, they can expire
+before I remember to grab an updated copy.  Oops.
+
+On an etcd node:
+ sudo etcdctl get /registry/secrets/kube-system/kubernetes-admin \
+ --cacert=/etc/kubernetes/checkpoint-secrets/kube-system/etcd-0/etcd-monitor/ca.crt \
+ --cert=/etc/kubernetes/checkpoint-secrets/kube-system/etcd-0/etcd-monitor/tls.crt \
+ --key=/etc/kubernetes/checkpoint-secrets/kube-system/etcd-0/etcd-monitor/tls.key
