@@ -5,7 +5,7 @@ local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
 // renovate: depName=calico/kube-controllers
-local version = "v3.19.1";
+local version = "v3.19.4";
 
 local mtu = 1440;
 local calico_backend = "bird";
@@ -30,7 +30,7 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
             log_level: "info",
             datastore_type: "kubernetes",
             nodename: "__KUBERNETES_NODE_NAME__",
-            mtu: mtu,
+            mtu: "__CNI_MTU__",
             ipam: {
               type: "calico-ipam",
               assign_ipv4: "true",
@@ -157,12 +157,12 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
         {
           apiGroups: [""],
           resources: ["pods"],
-          verbs: ["get"],
+          verbs: ["get", "list", "watch"],
         },
         {
           apiGroups: ["crd.projectcalico.org"],
           resources: ["ippools"],
-          verbs: ["list"],
+          verbs: ["list", "watch"],
         },
         {
           apiGroups: ["crd.projectcalico.org"],
@@ -177,12 +177,12 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
         {
           apiGroups: ["crd.projectcalico.org"],
           resources: ["clusterinformations"],
-          verbs: ["get", "create", "update"],
+          verbs: ["get", "list", "watch", "create", "update"],
         },
         {
           apiGroups: ["crd.projectcalico.org"],
           resources: ["kubecontrollersconfigurations"],
-          verbs: ["get", "create", "update", "watch"],
+          verbs: ["get", "list", "watch", "create", "update"],
         },
       ],
     },
@@ -220,6 +220,12 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
     },
   },
 
+  bgpconf: $.BGPConfiguration("node.50bea5a2341c40588d32c8103dea6e71") {
+    spec+: {
+      logSeverityScreen: "DEBUG",
+    },
+  },
+
   node: {
     clusterRole: kube.ClusterRole("calico-node") {
       rules: [
@@ -227,6 +233,11 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
           apiGroups: [""],
           resources: ["pods", "nodes", "namespaces"],
           verbs: ["get"],
+        },
+        {
+          apiGroups: ["discovery.k8s.io"],
+          resources: ["endpointslices"],
+          verbs: ["get", "list", "watch"],
         },
         {
           apiGroups: [""],
@@ -267,6 +278,7 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
             "globalbgpconfigs",
             "bgpconfigurations",
             "ippools",
+            "ipreservations",
             "ipamblocks",
             "globalnetworkpolicies",
             "globalnetworksets",
@@ -275,6 +287,7 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
             "clusterinformations",
             "hostendpoints",
             "blockaffinities",
+            "caliconodestatuses",
           ],
           verbs: ["get", "list", "watch"],
         },
@@ -282,6 +295,11 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
           apiGroups: ["crd.projectcalico.org"],
           resources: ["ippools", "felixconfigurations", "clusterinformations"],
           verbs: ["create", "update"],
+        },
+        {
+          apiGroups: ["crd.projectcalico.org"],
+          resources: ["caliconodestatuses"],
+          verbs: ["update"],
         },
         {
           apiGroups: [""],
@@ -343,7 +361,7 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
               cnibin: kube.HostPathVolume("/opt/cni/bin"),
               cnietc: kube.HostPathVolume("/etc/cni/net.d"),
               policysync: kube.HostPathVolume("/var/run/nodeagent", "DirectoryOrCreate"),
-              flexvol: kube.HostPathVolume("/var/lib/kubelet/volumeplugins/nodeagent~uds", "DirectoryOrCreate"),
+              //flexvol: kube.HostPathVolume("/var/lib/kubelet/volumeplugins/nodeagent~uds", "DirectoryOrCreate"),
               sysfspbf: kube.HostPathVolume("/sys/fs/bpf", "Directory"),
             },
 
@@ -364,7 +382,7 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
                   cnietc: {mountPath: "/host/etc/cni/net.d"},
                 },
               },
-              flexvol: kube.Container("flexvol-driver") {
+              flexvol:: kube.Container("flexvol-driver") {
                 image: "calico/pod2daemon-flexvol:" + version,
                 volumeMounts_+: {
                   flexvol: {mountPath: "/host/driver"},
@@ -393,7 +411,7 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
                   CALICO_DISABLE_FILE_LOGGING: true,
                   FELIX_DEFAULTENDPOINTTOHOSTACTION: "ACCEPT",
                   FELIX_IPV6SUPPORT: true,
-                  FELIX_LOGSEVERITYSCREEN: "info",
+                  FELIX_LOGSEVERITYSCREEN: "debug",
                   FELIX_HEALTHENABLED: true,
                   CALICO_MANAGE_CNI: true,
                 },
@@ -404,13 +422,26 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
                 resources: {
                   requests: {cpu: "100m", memory: "160Mi"},
                 },
+                lifecycle: {
+                  preStop: {
+                    exec: {
+                      command: ["/bin/calico-node", "-shutdown"],
+                    },
+                  },
+                },
                 readinessProbe: {
-                  httpGet: {path: "/readiness", host: "127.0.0.1", port: 9099, scheme: "HTTP"},
+                  //httpGet: {path: "/readiness", host: "127.0.0.1", port: 9099, scheme: "HTTP"},
+                  exec: {
+                    command: ["/bin/calico-node", "-felix-ready", "-bird-ready"],
+                  },
                   timeoutSeconds: 10,
                   periodSeconds: 30,
                 },
                 livenessProbe: self.readinessProbe {
-                  httpGet+: {path: "/liveness"},
+                  //httpGet+: {path: "/liveness"},
+                  exec: {
+                    command: ["/bin/calico-node", "-felix-live", "-bird-live"],
+                  },
                   initialDelaySeconds: 10,
                   failureThreshold: 6,
                 },
