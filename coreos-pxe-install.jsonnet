@@ -61,6 +61,7 @@ local filekey(path) = (
       units: [
         unit("containerd.service", false) {
           enable: false,  // use kube-containerd
+          mask: true,
         },
         unit("docker.service", false) {
           enable: false,  // use kube-containerd
