@@ -32,6 +32,7 @@ local kube = import "kube.libsonnet";
       local hash = std.substr(std.md5(std.toString(this.data)), 0, 7),
       name: super.name + "-" + hash,
     },
+    immutable: true,
   },
 
   HashedConfigMap(name):: kube.ConfigMap(name) {
@@ -40,6 +41,7 @@ local kube = import "kube.libsonnet";
       local hash = std.substr(std.md5(std.toString(this.data)), 0, 7),
       name: super.name + "-" + hash,
     },
+    immutable: true,
   },
 
   shcmd(name):: kube.Container(name) {
