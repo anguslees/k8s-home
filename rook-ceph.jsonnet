@@ -300,6 +300,107 @@ strategicpatch/patch.go: handleMapDiff(...) {
     },
   },
 
+  toolbox: kube.Deployment("rook-ceph-tools") + $.namespace {
+    spec+: {
+      template+: {
+        spec+: {
+          volumes_+: {
+            mons: {
+              configMap: {
+                name: "rook-ceph-mon-endpoints",
+                items: [{
+                  key: "data",
+                  path: "mon-endpoints",
+                }],
+              },
+            },
+            cfg: kube.EmptyDirVolume(),
+          },
+          containers_+: {
+            toolbox: kube.Container("toolbox") {
+              image: $.cluster.spec.cephVersion.image,
+              command: ["/bin/bash", "-c", self.script_],
+              script_:: |||
+                #!/bin/bash
+
+                CEPH_CONFIG="/etc/ceph/ceph.conf"
+                MON_CONFIG="/etc/rook/mon-endpoints"
+                KEYRING_FILE="/etc/ceph/keyring"
+
+                # create a ceph config file in its default location so ceph/rados tools can be used
+                # without specifying any arguments
+                write_endpoints() {
+                  endpoints=$(cat ${MON_CONFIG})
+                  # filter out the mon names
+                  # external cluster can have numbers or hyphens in mon names, handling them in regex
+                  # shellcheck disable=SC2001
+                  mon_endpoints=$(echo "${endpoints}"| sed 's/[a-z0-9_-]\+=//g')
+                  DATE=$(date)
+                  echo "$DATE writing mon endpoints to ${CEPH_CONFIG}: ${endpoints}"
+                    cat <<EOF > ${CEPH_CONFIG}
+                [global]
+                mon_host = ${mon_endpoints}
+                [client.admin]
+                keyring = ${KEYRING_FILE}
+                EOF
+                }
+                # watch the endpoints config file and update if the mon endpoints ever change
+                watch_endpoints() {
+                  # get the timestamp for the target of the soft link
+                  real_path=$(realpath ${MON_CONFIG})
+                  initial_time=$(stat -c %Z "${real_path}")
+                  while true; do
+                    real_path=$(realpath ${MON_CONFIG})
+                    latest_time=$(stat -c %Z "${real_path}")
+                    if [[ "${latest_time}" != "${initial_time}" ]]; then
+                      write_endpoints
+                      initial_time=${latest_time}
+                    fi
+                    sleep 10
+                  done
+                }
+                # create the keyring file
+                cat <<EOF > ${KEYRING_FILE}
+                [${ROOK_CEPH_USERNAME}]
+                key = ${ROOK_CEPH_SECRET}
+                EOF
+                # write the initial config file
+                write_endpoints
+                # continuously update the mon endpoints if they fail over
+                watch_endpoints
+              |||,
+              tty: true,
+              stdin: true,
+              securityContext: {
+                runAsNonRoot: true,
+                runAsUser: 2016,
+                runAsGroup: 2016,
+              },
+              env_+: {
+                ROOK_CEPH_USERNAME: {
+                  secretKeyRef: {
+                    name: "rook-ceph-mon",
+                    key: "ceph-username",
+                  },
+                },
+                ROOK_CEPH_SECRET: {
+                  secretKeyRef: {
+                    name: "rook-ceph-mon",
+                    key: "ceph-secret",
+                  },
+                },
+              },
+              volumeMounts_+: {
+                cfg: {mountPath: "/etc/ceph"},
+                mons: {mountPath: "/etc/rook"},
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+
   // These are used to coordinate with coreos' node updater
   // https://github.com/rook/rook/tree/release-1.0/cluster/examples/coreos
 
@@ -323,6 +424,52 @@ strategicpatch/patch.go: handleMapDiff(...) {
       data+: {
         "status-check.sh": |||
            #!/bin/bash
+
+           CEPH_CONFIG="/etc/ceph/ceph.conf"
+           MON_CONFIG="/etc/rook/mon-endpoints"
+           KEYRING_FILE="/etc/ceph/keyring"
+
+           # create a ceph config file in its default location so ceph/rados tools can be used
+           # without specifying any arguments
+           write_endpoints() {
+             endpoints=$(cat ${MON_CONFIG})
+             # filter out the mon names
+             # external cluster can have numbers or hyphens in mon names, handling them in regex
+             # shellcheck disable=SC2001
+             mon_endpoints=$(echo "${endpoints}"| sed 's/[a-z0-9_-]\+=//g')
+             DATE=$(date)
+             echo "$DATE writing mon endpoints to ${CEPH_CONFIG}: ${endpoints}"
+               cat <<EOF > ${CEPH_CONFIG}
+           [global]
+           mon_host = ${mon_endpoints}
+           [client.admin]
+           keyring = ${KEYRING_FILE}
+           EOF
+           }
+           # watch the endpoints config file and update if the mon endpoints ever change
+           watch_endpoints() {
+             # get the timestamp for the target of the soft link
+             real_path=$(realpath ${MON_CONFIG})
+             initial_time=$(stat -c %Z "${real_path}")
+             while true; do
+               real_path=$(realpath ${MON_CONFIG})
+               latest_time=$(stat -c %Z "${real_path}")
+               if [[ "${latest_time}" != "${initial_time}" ]]; then
+                 write_endpoints
+                 initial_time=${latest_time}
+               fi
+               sleep 10
+             done
+           }
+           # create the keyring file
+           cat <<EOF > ${KEYRING_FILE}
+           [${ROOK_CEPH_USERNAME}]
+           key = ${ROOK_CEPH_SECRET}
+           EOF
+           # write the initial config file
+           write_endpoints
+           # continuously update the mon endpoints if they fail over
+           watch_endpoints &
 
            # preflightCheck checks for existence of "dependencies"
            preflightCheck() {
@@ -413,28 +560,41 @@ strategicpatch/patch.go: handleMapDiff(...) {
                   }],
                 },
               },
+              cfg: kube.EmptyDirVolume(),
               scripts: kube.ConfigMapVolume(this.config) {
                 configMap+: {
-                  defaultMode: kube.parseOctal("0750"),
+                  defaultMode: kube.parseOctal("0755"),
                 },
               },
             },
             containers_+: {
               check: kube.Container("reboot-check") {
-                image: "rook/ceph-toolbox:master", // renovate
-                command: ["/scripts/status-check.sh"],
+                image: $.cluster.spec.cephVersion.image,
+                command: ["bash", "/scripts/status-check.sh"],
                 env_+: {
-                  ROOK_ADMIN_SECRET: {
+                  ROOK_CEPH_USERNAME: {
                     secretKeyRef: {
                       name: "rook-ceph-mon",
-                      key: "admin-secret",
+                      key: "ceph-username",
+                    },
+                  },
+                  ROOK_CEPH_SECRET: {
+                    secretKeyRef: {
+                      name: "rook-ceph-mon",
+                      key: "ceph-secret",
                     },
                   },
                   NODE: kube.FieldRef("spec.nodeName"),
                 },
                 volumeMounts_+: {
+                  cfg: {mountPath: "/etc/ceph"},
                   mons: {mountPath: "/etc/rook"},
                   scripts: {mountPath: "/scripts"},
+                },
+                securityContext: {
+                  runAsNonRoot: true,
+                  runAsUser: 2016,
+                  runAsGroup: 2016,
                 },
               },
             },
@@ -477,9 +637,6 @@ strategicpatch/patch.go: handleMapDiff(...) {
            }
 
            preflightCheck
-
-           echo "$(date) | Running the rook toolbox config initiation script..."
-           /usr/local/bin/toolbox.sh &
 
            TRIES=0
            until [ -f /etc/ceph/ceph.conf ]; do
@@ -574,9 +731,6 @@ strategicpatch/patch.go: handleMapDiff(...) {
            }
 
            preflightCheck
-
-           echo "$(date) | Running the rook toolbox config initiation script..."
-           /usr/local/bin/toolbox.sh &
 
            TRIES=0
            until [ -f /etc/ceph/ceph.conf ]; do
