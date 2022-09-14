@@ -30,7 +30,7 @@ local clusterCidr6 = "2406:3400:249:1703::/112";
             log_level: "info",
             datastore_type: "kubernetes",
             nodename: "__KUBERNETES_NODE_NAME__",
-            mtu: "__CNI_MTU__",
+            mtu: mtu, // __CNI_MTU__ (no quotes, which makes it invalid json)
             ipam: {
               type: "calico-ipam",
               assign_ipv4: "true",
