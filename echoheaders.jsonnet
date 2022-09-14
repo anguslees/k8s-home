@@ -20,7 +20,7 @@ local utils = import "utils.libsonnet";
           nodeSelector+: utils.archSelector("amd64"),
           containers_+: {
             default: kube.Container("echoheaders") {
-              image: "k8s.gcr.io/echoserver:1.10", // renovate
+              image: "registry.k8s.io/echoserver:1.10", // renovate
               ports_: {
                 http: {containerPort: 8080},
               },

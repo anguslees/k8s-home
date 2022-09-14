@@ -333,7 +333,7 @@ local filekey(path) = (
       file("/etc/kubernetes/kubelet.env", |||
         # TODO: most of this is obsolete - remove.
         KUBELET_IMAGE=quay.io/poseidon/kubelet:%(tag)s
-        KUBELET_IMAGE_URL=docker://k8s.gcr.io/hyperkube
+        KUBELET_IMAGE_URL=docker://registry.k8s.io/hyperkube
         KUBELET_IMAGE_TAG=%(tag)s
         KUBELET_VERSION=%(tag)s
         KUBELET_SHA512=%(sha512)s
@@ -756,9 +756,9 @@ local filekey(path) = (
               // don't really want to burn a NodePort on it.
               local tftpserver = "$(POD_IP)",
 
-              // renovate: depName=k8s.gcr.io/kube-dnsmasq-amd64
+              // renovate: depName=registry.k8s.io/kube-dnsmasq-amd64
               local version = "1.4",
-              image: "k8s.gcr.io/kube-dnsmasq-%s:%s" % [arch, version],
+              image: "registry.k8s.io/kube-dnsmasq-%s:%s" % [arch, version],
               args: [
                 "--log-facility=-", // stderr
                 "--log-dhcp",

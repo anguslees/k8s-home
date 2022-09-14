@@ -15,9 +15,9 @@ local certman = import "cert-manager.jsonnet";
 // 2. rest of control plane
 // 3. kubelets (see coreos-pxe-install.jsonnet:coreos_kubelet_tag)
 
-// renovate: depName=k8s.gcr.io/kube-proxy
+// renovate: depName=registry.k8s.io/kube-proxy
 local version = "v1.22.6";
-// renovate: depName=k8s.gcr.io/kube-apiserver
+// renovate: depName=registry.k8s.io/kube-apiserver
 local apiserverVersion = "v1.22.6";
 
 local externalHostname = "kube.lan";
@@ -507,7 +507,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_: {
               kube_proxy: kube.Container("kube-proxy") {
-                image: "k8s.gcr.io/kube-proxy:%s" % [version],
+                image: "registry.k8s.io/kube-proxy:%s" % [version],
                 command: ["kube-proxy"],
                 args_+: {
                   "kubeconfig": "/etc/kubernetes/kubeconfig.conf",
@@ -634,7 +634,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               apiserver: kube.Container("apiserver") {
-                image: "k8s.gcr.io/kube-apiserver:%s" % [apiserverVersion],
+                image: "registry.k8s.io/kube-apiserver:%s" % [apiserverVersion],
                 command: ["kube-apiserver"],
                 args_+: {
                   feature_gates_:: {
@@ -852,7 +852,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               cm: kube.Container("controller-manager") {
-                image: "k8s.gcr.io/kube-controller-manager:%s" % [version],
+                image: "registry.k8s.io/kube-controller-manager:%s" % [version],
                 command: ["kube-controller-manager"],
                 args_+: {
                   "profiling": "false",
@@ -973,7 +973,7 @@ local CA(name, namespace, issuer) = {
             serviceAccountName: $.scheduler.sa.metadata.name,
             containers_+: {
               scheduler: kube.Container("scheduler") {
-                image: "k8s.gcr.io/kube-scheduler:%s" % [version],
+                image: "registry.k8s.io/kube-scheduler:%s" % [version],
                 command: ["kube-scheduler"],
                 args_+: {
                   "profiling": "false",
@@ -1219,7 +1219,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               coredns: kube.Container("coredns") {
-                image: "k8s.gcr.io/coredns:1.7.0", // renovate
+                image: "registry.k8s.io/coredns:1.7.0", // renovate
                 resources+: {
                   limits: {memory: "170Mi"},
                   requests: {cpu: "50m", memory: "30Mi"},
@@ -1351,7 +1351,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               default: kube.Container("metrics-server") {
-                image: "k8s.gcr.io/metrics-server/metrics-server:v0.5.1", // renovate
+                image: "registry.k8s.io/metrics-server/metrics-server:v0.5.1", // renovate
                 command: ["/metrics-server"],
                 args_+: {
                   "logtostderr": "true",

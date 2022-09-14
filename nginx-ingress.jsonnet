@@ -68,7 +68,7 @@ local issuerRef(issuer) = {
           terminationGracePeriodSeconds: 60,
           containers_+: {
             default: kube.Container("default-http-backend") {
-              image: "k8s.gcr.io/defaultbackend:1.4", // renovate
+              image: "registry.k8s.io/defaultbackend:1.4", // renovate
               livenessProbe: {
                 httpGet: { path: "/healthz", port: 8080, scheme: "HTTP" },
                 initialDelaySeconds: 30,
@@ -239,7 +239,7 @@ local issuerRef(issuer) = {
           },
           containers_+: {
             default: kube.Container("nginx") {
-              image: "k8s.gcr.io/ingress-nginx/controller:v1.1.3", // renovate
+              image: "registry.k8s.io/ingress-nginx/controller:v1.1.3", // renovate
               env_+: {
                 POD_NAME: kube.FieldRef("metadata.name"),
                 POD_NAMESPACE: kube.FieldRef("metadata.namespace"),

@@ -564,7 +564,7 @@ local path_join(prefix, suffix) = (
                 },
               },
               resizer: kube.Container("addon-resizer") {
-                image: "k8s.gcr.io/addon-resizer:2.3", // renovate
+                image: "registry.k8s.io/addon-resizer:2.3", // renovate
                 command: ["/pod_nanny"],
                 args_+: {
                   container: spec.containers[0].name,
