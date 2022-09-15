@@ -578,11 +578,6 @@
     spec: {},
   },
 
-  ThirdPartyResource(name): $._Object("extensions/v1beta1", "ThirdPartyResource", name) {
-    versions_:: [],
-    versions: [{ name: n } for n in self.versions_],
-  },
-
   CustomResourceDefinition(group, version, kind): {
     local this = self,
     apiVersion: "apiextensions.k8s.io/v1",
