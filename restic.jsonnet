@@ -88,7 +88,7 @@ local host = "restic.oldmacdonald.farm";
           },
           containers_+: {
             default: kube.Container("rest-server") {
-              image: "restic/rest-server:0.10.0", // renovate
+              image: "restic/rest-server:0.11.0", // renovate
               ports_+: {
                 http: {containerPort: 8000},
               },
