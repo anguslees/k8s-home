@@ -7,10 +7,10 @@ local utils = import "utils.libsonnet";
 //   kubectl label nodes -l flatcar-linux-update.v1.flatcar-linux.net/id flatcar-linux-update.v1.flatcar-linux.net/reboot-needed=true
 
 // renovate: depName=kubernetes/kubernetes datasource=github-releases versioning=semver
-local kubelet_tag = "v1.21.7";
+local kubelet_tag = "v1.22.6";
 // sha512 for linux/amd64 'node binaries' tarball
 // TODO: renovate doesn't support this yet.  Remove/fix/something.
-local kubelet_sha512 = "e6a7f2507f6a4b2f36523573deac0ad3d7922638ca7a0b8c0f8fda32cd512cf342a66ab041d43e7c853963479eaad6c59d4d2a96c59c8cbe18b48166cc23125e";
+local kubelet_sha512 = "f11f3fef5d6139c69da80264872dce3c00e78f8c8af70584c3beb43723ac0a796277700b3f750b04629f9f4d291c21bb0abd956bca4d31b9c6742c952e0d964d";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)
