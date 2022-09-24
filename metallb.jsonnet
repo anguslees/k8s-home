@@ -2,7 +2,7 @@ local kube = import "kube.libsonnet";
 local kubecfg = import "kubecfg.libsonnet";
 
 // renovate: depName=metallb/controller
-local version = "v0.10.2";
+local version = "v0.12.1";
 
 {
   namespace:: {metadata+: {namespace: "metallb"}},
