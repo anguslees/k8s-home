@@ -41,6 +41,5 @@
   webcache: import "webcache.jsonnet",
   mail: import "mail.jsonnet",
   echoheaders: import "echoheaders.jsonnet",
-  openhab: import "openhab.jsonnet",
   restic: import "restic.jsonnet",
 }

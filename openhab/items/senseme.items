@@ -1,9 +1,0 @@
-Switch LoungeFanPower "Fan Power" ["Switchable"] { channel="bigassfan:fan:20F85EDA6F34:fan-power" }
-Dimmer LoungeFanSpeed "Fan Speed" { channel="bigassfan:fan:20F85EDA6F34:fan-speed" }
-Switch LoungeFanAuto "Fan Auto"   { channel="bigassfan:fan:20F85EDA6F34:fan-auto" }
-Switch LoungeFanWhoosh "Fan Woosh" { channel="bigassfan:fan:20F85EDA6F34:fan-whoosh" }
-String LoungeFanSmartmode "Fan Smart mode" { channel="bigassfan:fan:20F85EDA6F34:fan-smartmode" }
-Dimmer LoungeFanSpeedMin "Fan Speed min" { channel="bigassfan:fan:20F85EDA6F34:fan-learn-minspeed" }
-Dimmer LoungeFanSpeedMax "Fan Speed max" { channel="bigassfan:fan:20F85EDA6F34:fan-learn-maxspeed" }
-Switch LoungeFanMotionSensor "Fan Motion sensor" { channel="bigassfan:fan:20F85EDA6F34:motion" }
-DateTime LoungeFanTime "Fan Time" { channel="bigassfan:fan:20F85EDA6F34:time" }

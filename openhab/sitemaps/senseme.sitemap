@@ -1,6 +1,0 @@
-sitemap senseme label="LoungeFan" {
-  Frame label="Control Lounge Fan" {
-    Switch item=LoungeFanPower label="Fan Power [%s]"
-    Slider item=LoungeFanSpeed label="Fan Speed [%s %%]"
-  }
-}

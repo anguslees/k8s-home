@@ -1,6 +1,0 @@
-Thing kodi:kodi:myKodi "Kodi" @ "Living Room" [ipAddress="tellymonster.lan", port=9090] {
-  Channels:
-  Type pvr-open-tv : pvr-open-tv [
-    group="All channels"
-  ]
-}
