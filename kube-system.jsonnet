@@ -322,8 +322,7 @@ local CA(name, namespace, issuer) = {
                   GOGC: "25",
                 },
                 livenessProbe: {
-                  // /health fails if endpoint is out of quorum, so don't use for liveness!
-                  tcpSocket: {port: 2381},
+                  httpGet: {path: "/health?serializable=true", port: 2381, scheme: "HTTP"},
                   // v1.23 + GRPCContainerProbe feature gate
                   //grpc: {port: 2379}
                   failureThreshold: 5,
