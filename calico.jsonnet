@@ -105,7 +105,7 @@ upstream + {
                   FELIX_IPV6SUPPORT: true,
                   IP6: "autodetect",
                   IP6_AUTODETECTION_METHOD: "can-reach=www.google.com",
-                  FELIX_LOGSEVERITYSCREEN: "debug",
+                  FELIX_LOGSEVERITYSCREEN: "INFO",
                   CALICO_MANAGE_CNI: true,
                 },
                 resources+: {
@@ -119,9 +119,11 @@ upstream + {
     },
   },
 
+  /*
   bgpconf: BGPConfiguration("node.50bea5a2341c40588d32c8103dea6e71") {
     spec+: {
       logSeverityScreen: "DEBUG",
     },
   },
+  */
 }
