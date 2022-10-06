@@ -30,7 +30,7 @@ local dnsDomain = "cluster.local";
 // NB: these IPs are also burnt into the peer/server certificates,
 // because of the golang TLS verification wars.
 local etcdMembers = {
-  "b4c71f92c2214edb97a4a11e17482a01": "192.168.0.176", // etcd-2 - Dell optiplex
+  "b4c71f92c2214edb97a4a11e17482a01": "192.168.0.166", // etcd-2 - Dell optiplex
   // Flaky
   //"fc4698cdc1184810a2c3447a7ee66689": "192.168.0.129",  // etcd-0 - Red HP
   // Dead
