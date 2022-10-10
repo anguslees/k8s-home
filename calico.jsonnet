@@ -5,7 +5,7 @@ local kubecfg = import "kubecfg.libsonnet";
 local utils = import "utils.libsonnet";
 
 // renovate: depName=calico/kube-controllers
-local version = "v3.19.4";
+local version = "v3.24.1";
 
 local mtu = 1440;
 local calico_backend = "bird";
