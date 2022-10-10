@@ -429,7 +429,7 @@ local path_join(prefix, suffix) = (
             tolerations: utils.toleratesMaster,
             containers_+: {
               default: kube.Container("node-exporter") {
-                image: "quay.io/prometheus/node-exporter:v1.3.1", // renovate
+                image: "quay.io/prometheus/node-exporter:v1.4.0", // renovate
                 local v = self.volumeMounts_,
                 args_+: {
                   "path.rootfs": v.root.mountPath,
