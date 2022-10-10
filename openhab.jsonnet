@@ -132,7 +132,7 @@ local utils = import "utils.libsonnet";
           containers_+: {
             openhab: kube.Container("openhab") {
               local container = self,
-              image: "openhab/openhab:2.5.12", // renovate
+              image: "openhab/openhab:3.3.0", // renovate
               ports_+: {
                 http: {containerPort: 8080},
                 https: {containerPort: 8443},
