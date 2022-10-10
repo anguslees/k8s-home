@@ -7,7 +7,7 @@ local utils = import "utils.libsonnet";
 //   kubectl label nodes -l flatcar-linux-update.v1.flatcar-linux.net/id flatcar-linux-update.v1.flatcar-linux.net/reboot-needed=true
 
 // renovate: depName=kubernetes/kubernetes datasource=github-releases versioning=semver
-local kubelet_tag = "v1.22.6";
+local kubelet_tag = "v1.22.15";
 // sha512 for linux/amd64 'node binaries' tarball
 // TODO: renovate doesn't support this yet.  Remove/fix/something.
 local kubelet_sha512 = "f11f3fef5d6139c69da80264872dce3c00e78f8c8af70584c3beb43723ac0a796277700b3f750b04629f9f4d291c21bb0abd956bca4d31b9c6742c952e0d964d";
