@@ -58,6 +58,7 @@ local arch = "amd64";
               },
               env_+: {
                 GOGC: "25",
+                GOMEMLIMIT: kube.ResourceFieldRef("requests.memory"),
               },
               livenessProbe: {
                 httpGet: {path: "/healthz", port: 8081},

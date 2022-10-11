@@ -320,6 +320,7 @@ local CA(name, namespace, issuer) = {
                   AA_POD_IP: kube.FieldRef("status.podIP"),
                   ETCDCTL_ENDPOINTS: "https://$(AA_POD_IP):2379/",
                   GOGC: "25",
+                  GOMEMLIMIT: kube.ResourceFieldRef("requests.memory"),
                 },
                 livenessProbe: {
                   httpGet: {path: "/health?serializable=true", port: 2381, scheme: "HTTP"},
@@ -524,6 +525,7 @@ local CA(name, namespace, issuer) = {
                   NODE_NAME: kube.FieldRef("spec.nodeName"),
                   POD_IP: kube.FieldRef("status.podIP"),
                   GOGC: "25",
+                  GOMEMLIMIT: kube.ResourceFieldRef("requests.memory"),
                 },
                 ports_+: {
                   metrics: {containerPort: 10249},
@@ -710,6 +712,7 @@ local CA(name, namespace, issuer) = {
                 env_+: {
                   POD_IP: kube.FieldRef("status.podIP"),
                   GOGC: "25",
+                  GOMEMLIMIT: kube.ResourceFieldRef("requests.memory"),
                 },
                 ports_+: {
                   https: {containerPort: 6443, protocol: "TCP"},
@@ -887,6 +890,7 @@ local CA(name, namespace, issuer) = {
                 },
                 env_+: {
                   GOGC: "25",
+                  GOMEMLIMIT: kube.ResourceFieldRef("requests.memory"),
                 },
                 livenessProbe: {
                   httpGet: {path: "/healthz", port: 10257, scheme: "HTTPS"},
@@ -987,6 +991,7 @@ local CA(name, namespace, issuer) = {
                 },
                 env_+: {
                   GOGC: "25",
+                  GOMEMLIMIT: kube.ResourceFieldRef("requests.memory"),
                 },
                 livenessProbe: {
                   httpGet: {path: "/healthz", port: 10251, scheme: "HTTP"},
@@ -1095,6 +1100,7 @@ local CA(name, namespace, issuer) = {
                   POD_NAME: kube.FieldRef("metadata.name"),
                   POD_NAMESPACE: kube.FieldRef("metadata.namespace"),
                   GOGC: "25",
+                  GOMEMLIMIT: kube.ResourceFieldRef("requests.memory"),
                 },
                 volumeMounts_+: {
                   kubeconfig: {
@@ -1228,6 +1234,7 @@ local CA(name, namespace, issuer) = {
                 },
                 env_+: {
                   GOGC: "25",
+                  GOMEMLIMIT: kube.ResourceFieldRef("requests.memory"),
                 },
                 volumeMounts_+: {
                   config: {mountPath: "/etc/coredns", readOnly: true},
@@ -1365,6 +1372,7 @@ local CA(name, namespace, issuer) = {
                 },
                 env_+: {
                   GOGC: "25",
+                  GOMEMLIMIT: kube.ResourceFieldRef("requests.memory"),
                 },
                 ports_+: {
                   https: {containerPort: 8443, protocol: "TCP"},
