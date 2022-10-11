@@ -76,10 +76,17 @@ local utils = import "utils.libsonnet";
               },
               readinessProbe: {
                 tcpSocket: {port: "proxy"},
+                timeoutSeconds: 10,
+                successThreshold: 1,
+                periodSeconds: 10,
               },
-              livenessProbe: self.readinessProbe,
+              livenessProbe: self.readinessProbe {
+                failureThreshold: 3,
+              },
+              startupProbe: self.livenessProbe {
+                failureThreshold: std.ceil(300 / self.periodSeconds),
+              },
               resources+: {
-                limits: {cpu: "1", memory: "1Gi"},
                 requests: {
                   cpu: "10m",
                   memory: "280Mi",
@@ -98,9 +105,19 @@ local utils = import "utils.libsonnet";
               readinessProbe: {
                 httpGet: {path: "/", port: "metrics"},
                 periodSeconds: 30,
+                timeoutSeconds: 10,
               },
               livenessProbe: self.readinessProbe {
-                initialDelaySeconds: 30,
+                failureThreshold: 3,
+              },
+              startupProbe: self.livenessProbe {
+                failureThreshold: std.ceil(300 / self.periodSeconds),
+              },
+              resources+: {
+                requests: {
+                  cpu: "10m",
+                  memory: "20Mi",
+                },
               },
             },
           },
