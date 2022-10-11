@@ -140,8 +140,10 @@ strategicpatch/patch.go: handleMapDiff(...) {
             placement: {
               podAntiAffinity: {
                 local selector = {
-                  app: "rook-ceph-osd",
-                  rook_cluster: "rook-ceph",
+                  matchLabels: {
+                    app: "rook-ceph-osd",
+                    rook_cluster: "rook-ceph",
+                  },
                 },
                 preferredDuringSchedulingIgnoredDuringExecution: [
                   {
@@ -259,8 +261,10 @@ strategicpatch/patch.go: handleMapDiff(...) {
         placement: {
           podAntiAffinity: {
             local selector = {
-              app: "rook-ceph-mds",
-              rook_file_system: this.metadata.name,
+              matchLabels: {
+                app: "rook-ceph-mds",
+                rook_file_system: this.metadata.name,
+              },
             },
             preferredDuringSchedulingIgnoredDuringExecution: [
               {
