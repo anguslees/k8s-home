@@ -60,6 +60,11 @@ local rookCephSystem = import "rook-ceph-system.jsonnet";
             interval: "30s", // default 10s
             timeout: "10s", // default 1s
           },
+          mds: {
+            disabled: false,
+            interval: "30s", // default 10s
+            timeout: "10s", // default 1s
+          },
         },
       },
       mon: {
