@@ -109,7 +109,7 @@ upstream + {
                   CALICO_MANAGE_CNI: true,
                 },
                 resources+: {
-                  requests+: {cpu: "100m", memory: "160Mi"},
+                  requests+: {cpu: "100m", memory: "200Mi"},
                 },
               },
             },
