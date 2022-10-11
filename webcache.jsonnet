@@ -57,6 +57,7 @@ local utils = import "utils.libsonnet";
           },
         },
         spec+: {
+          nodeSelector+: utils.archSelector("amd64"),
           automountServiceAccountToken: false,
           volumes_+: {
             data: kube.EmptyDirVolume(),  // NB: non-persistent cache
