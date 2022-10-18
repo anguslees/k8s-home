@@ -10,7 +10,7 @@ local utils = import "utils.libsonnet";
 local kubelet_tag = "v1.22.15";
 // sha512 for linux/amd64 'node binaries' tarball
 // TODO: renovate doesn't support this yet.  Remove/fix/something.
-local kubelet_sha512 = "f11f3fef5d6139c69da80264872dce3c00e78f8c8af70584c3beb43723ac0a796277700b3f750b04629f9f4d291c21bb0abd956bca4d31b9c6742c952e0d964d";
+local kubelet_sha512 = "951ad79c87dff146526d706ac4230926cf020718b25556b1be12de825b04dfbd196b0895989b75df1eaec6e5d52bc86c6a87836997fa2ee748ca753a469f71c7";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)
