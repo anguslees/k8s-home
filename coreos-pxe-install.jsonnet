@@ -8,9 +8,6 @@ local utils = import "utils.libsonnet";
 
 // renovate: depName=kubernetes/kubernetes datasource=github-releases versioning=semver
 local kubelet_tag = "v1.22.15";
-// sha512 for linux/amd64 'node binaries' tarball
-// TODO: renovate doesn't support this yet.  Remove/fix/something.
-local kubelet_sha512 = "951ad79c87dff146526d706ac4230926cf020718b25556b1be12de825b04dfbd196b0895989b75df1eaec6e5d52bc86c6a87836997fa2ee748ca753a469f71c7";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)
@@ -136,7 +133,7 @@ local filekey(path) = (
                     "/opt/cni/bin",
                     "/etc/cni/net.d",
                   ]),
-                  "/opt/bin/download-kubelet /opt/kubelet ${KUBELET_VERSION} ${KUBELET_SHA512}",
+                  "/opt/bin/download-kubelet /opt/kubelet ${KUBELET_VERSION}",
                 ],
                 Slice: "podruntime.slice",
                 // TODO: /v/l/kubelet/plugins{,_registry} should maybe move to /run
@@ -331,15 +328,8 @@ local filekey(path) = (
         permissions: "0755",
       },
       file("/etc/kubernetes/kubelet.env", |||
-        # TODO: most of this is obsolete - remove.
-        KUBELET_IMAGE=quay.io/poseidon/kubelet:%(tag)s
-        KUBELET_IMAGE_URL=docker://registry.k8s.io/hyperkube
-        KUBELET_IMAGE_TAG=%(tag)s
         KUBELET_VERSION=%(tag)s
-        KUBELET_SHA512=%(sha512)s
-        KUBELET_IMAGE_ARGS=--exec=kubelet
-        RKT_GLOBAL_ARGS="--insecure-options=image"
-      ||| % {tag: kubelet_tag, sha512: kubelet_sha512},
+      ||| % {tag: kubelet_tag},
       ),
       file("/etc/sysctl.d/max-user-watches.conf", |||
         fs.inotify.max_user_watches=16184

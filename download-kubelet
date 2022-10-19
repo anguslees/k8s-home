@@ -18,7 +18,9 @@ cd $dir
 
 echo "Downloading https://dl.k8s.io/$v/kubernetes-node-$os-$arch.tar.gz"
 wget --progress=dot -e dotbytes=1M https://dl.k8s.io/$v/kubernetes-node-$os-$arch.tar.gz
-echo "$csum" kubernetes-node-$os-$arch.tar.gz | sha512sum -c
+if [ -n "$csum" ]; then
+    echo "$csum" kubernetes-node-$os-$arch.tar.gz | sha512sum -c
+fi
 
 echo "Extracting archive"
 if [ -d $D/kubelet-$v ]; then
