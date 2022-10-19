@@ -7,7 +7,7 @@ local utils = import "utils.libsonnet";
 //   kubectl label nodes -l flatcar-linux-update.v1.flatcar-linux.net/id flatcar-linux-update.v1.flatcar-linux.net/reboot-needed=true
 
 // renovate: depName=kubernetes/kubernetes datasource=github-releases versioning=semver
-local kubelet_tag = "v1.22.15";
+local kubelet_tag = "v1.23.13";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)
@@ -175,7 +175,9 @@ local filekey(path) = (
                   "rotate-server-certificates": true,
                   feature_gates_:: {
                     IPv6DualStack: true,
-                    //NodeSwap: true,
+                    NodeSwap: true,
+                    DisableCloudProviders: true,
+                    //DisableCloudCredentialProviders: true,  // 1.23
                   },
                   "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
                   "tls-min-version": "VersionTLS12",

@@ -16,9 +16,9 @@ local certman = import "cert-manager.jsonnet";
 // 3. kubelets (see coreos-pxe-install.jsonnet:coreos_kubelet_tag)
 
 // renovate: depName=registry.k8s.io/kube-proxy
-local version = "v1.22.15";
+local version = "v1.23.13";
 // renovate: depName=registry.k8s.io/kube-apiserver
-local apiserverVersion = "v1.22.15";
+local apiserverVersion = "v1.23.13";
 
 local externalHostname = "kube.lan";
 local apiServer = "https://%s:6443" % [externalHostname];
@@ -640,6 +640,7 @@ local CA(name, namespace, issuer) = {
                 args_+: {
                   feature_gates_:: {
                     IPv6DualStack: true,
+                    DisableCloudProviders: true,
                   },
                   "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
                   "endpoint-reconciler-type": "lease",
@@ -702,10 +703,6 @@ local CA(name, namespace, issuer) = {
                     // Workaround old coreos update-operator code.
                     // https://github.com/coreos/container-linux-update-operator/issues/196
                     "extensions/v1beta1/daemonsets": true,
-                    // For old rook-ceph helm chart
-                    "rbac.authorization.k8s.io/v1beta1": true,
-                    "apiextensions.k8s.io/v1beta1": true,
-                    "certificates.k8s.io/v1beta1/certificatesigningrequests": true,
                   },
                   "runtime-config": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.runtime_config_)]),
                 },
@@ -864,6 +861,7 @@ local CA(name, namespace, issuer) = {
 
                   feature_gates_:: {
                     IPv6DualStack: true,
+                    DisableCloudProviders: true,
                   },
                   "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
 
@@ -994,7 +992,7 @@ local CA(name, namespace, issuer) = {
                   GOMEMLIMIT: kube.ResourceFieldRef("requests.memory"),
                 },
                 livenessProbe: {
-                  httpGet: {path: "/healthz", port: 10251, scheme: "HTTP"},
+                  httpGet: {path: "/healthz", port: 10259, scheme: "HTTPS"},
                   timeoutSeconds: 20,
                   periodSeconds: 30,
                 },
@@ -1542,10 +1540,11 @@ local CA(name, namespace, issuer) = {
           featureGates: {
             IPv6DualStack: true,
             NodeSwap: true,
+            DisableCloudProviders: true,
           },
 
           failSwapOn: false,
-          //memorySwap: {},  FIXME: todo!
+          memorySwap: {swapBehavior: "UnlimitedSwap"},
 
           cgroupRoot: "/",
           cgroupDriver: "systemd",
