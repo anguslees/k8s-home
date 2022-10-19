@@ -213,7 +213,7 @@ local path_join(prefix, suffix) = (
             containers_+: {
               prometheus: kube.Container("prometheus") {
                 local this = self,
-                image: "quay.io/prometheus/prometheus:v2.38.0", // renovate
+                image: "quay.io/prometheus/prometheus:v2.39.1", // renovate
                 args_+: {
                   //"log.level": "debug",  // default is info
 
