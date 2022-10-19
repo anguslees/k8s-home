@@ -7,12 +7,7 @@ local stripLeading(c, str) = if std.startsWith(str, c) then
 
 local isalpha(c) = std.codepoint(c) >= std.codepoint("a") && std.codepoint(c) <= std.codepoint("z");
 
-// renovate: depName=quay.io/kinvolk/flatcar-linux-update-operator
-local version = "v0.7.3";
-
 local arch = "amd64";
-
-local archNodeSelector(a) = {nodeSelector+: utils.archSelector(a)};
 
 {
   namespace:: {
@@ -62,11 +57,12 @@ local archNodeSelector(a) = {nodeSelector+: utils.archSelector(a)};
         local hostPaths = ["/var/run/dbus", "/etc/flatcar", "/usr/share/flatcar", "/etc/os-release"],
         local name(path) = stripLeading("-", std.join("", [if isalpha(c) then c else "-" for c in std.stringChars(path)])),
 
-        spec+: archNodeSelector(arch) + {
+        spec+: {
           serviceAccountName: $.serviceAccount.metadata.name,
+          nodeSelector+: utils.archSelector(arch),
           containers_+: {
             update_agent: kube.Container("update-agent") {
-              image: "quay.io/kinvolk/flatcar-linux-update-operator:%s" % version,
+              image: "quay.io/kinvolk/flatcar-linux-update-operator:v0.7.3", // renovate
               command: ["/bin/update-agent"],
               volumeMounts+: [
                 {
@@ -95,11 +91,12 @@ local archNodeSelector(a) = {nodeSelector+: utils.archSelector(a)};
   flatcar_update_operator: kube.Deployment("flatcar-update-operator") + $.namespace {
     spec+: {
       template+: {
-        spec+: archNodeSelector(arch) + {
+        spec+: {
           serviceAccountName: $.serviceAccount.metadata.name,
+          nodeSelector+: utils.archSelector(arch),
           containers_+: {
             update_operator: kube.Container("update-operator") {
-              image: "quay.io/kinvolk/flatcar-linux-update-operator:%s" % version,
+              image: "quay.io/kinvolk/flatcar-linux-update-operator:v0.7.3", // renovate
               command: ["/bin/update-operator"],
               args_+: {
                 "before-reboot-annotations": "ceph-before-reboot-check",
