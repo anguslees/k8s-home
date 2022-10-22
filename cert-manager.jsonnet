@@ -4,7 +4,7 @@ local kubecfg = import "kubecfg.libsonnet";
 
 local email = "guslees+letsencrypt@gmail.com";
 
-// renovate: depName=cert-manager registryUrls=https://charts.jetstack.io
+// renovate: depName=cert-manager registryUrl=https://charts.jetstack.io
 local chartData = importbin "https://charts.jetstack.io/charts/cert-manager-v1.5.3.tgz";
 
 {

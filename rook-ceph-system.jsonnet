@@ -5,7 +5,7 @@ local utils = import "utils.libsonnet";
 // Needs at least 1.3.8 to avoid chart syntax error
 // -> https://github.com/rook/rook/pull/5660
 
-// renovate: depName=rook-ceph registryUrls=https://charts.rook.io/release
+// renovate: depName=rook-ceph registryUrl=https://charts.rook.io/release
 local chartData = importbin "https://charts.rook.io/release/rook-ceph-v1.6.11.tgz";
 
 {
