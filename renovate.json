@@ -40,7 +40,7 @@
       "description": "Update json/yaml importstr versions in jsonnet",
       "fileMatch": ["\\.(jsonnet|libsonnet)$"],
       "matchStrings": [
-        "// renovate: depName=(?<depName>.+?)(?: lookupName=(?<lookupName>.+?))?(?: registryUrls=(?<registryUrls>.*?))?(?: datasource=(?<datasource>{a-z-]+?))?(?: versioning=(?<versioning>[a-z-]+?))?\\s.+?importstr ['\"]https?://.*(?<currentValue>v?[0-9.]+?).*\\.(ya?ml|json)['\"]"
+        "// renovate: depName=(?<depName>.+?)(?: lookupName=(?<lookupName>.+?))?(?: registryUrls=(?<registryUrls>.*?))?(?: datasource=(?<datasource>{a-z-]+?))?(?: versioning=(?<versioning>[a-z-]+?))?\\s.+?importstr ['\"]https?://.*(?<currentValue>v?[0-9.]+).*\\.(ya?ml|json)['\"]"
       ],
       "datasourceTemplate": "{{#if datasource}}{{datasource}}{{else}}github-releases{{/if}}",
       "versioningTemplate": "{{#if versioning}}{{versioning}}{{else}}semver{{/if}}"
@@ -49,7 +49,7 @@
       "description": "Update helm importbin versions in jsonnet",
       "fileMatch": ["\\.(jsonnet|libsonnet)$"],
       "matchStrings": [
-        "// renovate: depName=(?<depName>.+?)(?: lookupName=(?<lookupName>.+?))?(?: registryUrls=(?<registryUrls>.*?))?(?: datasource=(?<datasource>{a-z-]+?))?(?: versioning=(?<versioning>[a-z-]+?))?\\s.+?importbin ['\"]https?://.*-(?<currentValue>v?[0-9.]+?)\\.(tgz|tar\\.gz)['\"]"
+        "// renovate: depName=(?<depName>.+?)(?: lookupName=(?<lookupName>.+?))?(?: registryUrls=(?<registryUrls>.*?))?(?: datasource=(?<datasource>{a-z-]+?))?(?: versioning=(?<versioning>[a-z-]+?))?\\s.+?importbin ['\"]https?://.*-(?<currentValue>v?[0-9.]+)\\.(tgz|tar\\.gz)['\"]"
       ],
       "datasourceTemplate": "{{#if datasource}}{{datasource}}{{else}}helm{{/if}}",
       "versioningTemplate": "{{#if versioning}}{{versioning}}{{else}}helm{{/if}}"
