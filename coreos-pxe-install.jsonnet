@@ -7,7 +7,7 @@ local utils = import "utils.libsonnet";
 //   kubectl label nodes -l flatcar-linux-update.v1.flatcar-linux.net/id flatcar-linux-update.v1.flatcar-linux.net/reboot-needed=true
 
 // renovate: depName=kubernetes/kubernetes datasource=github-releases versioning=semver
-local kubelet_tag = "v1.23.13";
+local kubelet_tag = "v1.24.7";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)
@@ -167,9 +167,6 @@ local filekey(path) = (
                   "container-runtime-endpoint": "unix:///run/containerd/containerd.sock",
                   "hostname-override": "%m",
                   "lock-file": "/var/run/lock/kubelet.lock",
-                  "network-plugin": "cni",
-                  "cni-conf-dir": "/etc/cni/net.d",
-                  "cni-bin-dir": "/opt/cni/bin",  // TODO: move cni to a /run directory?
                   "pod-manifest-path": "/etc/kubernetes/manifests",
                   "rotate-certificates": true,
                   "rotate-server-certificates": true,

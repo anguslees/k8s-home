@@ -16,9 +16,9 @@ local certman = import "cert-manager.jsonnet";
 // 3. kubelets (see coreos-pxe-install.jsonnet:coreos_kubelet_tag)
 
 // renovate: depName=registry.k8s.io/kube-proxy
-local version = "v1.23.13";
+local version = "v1.24.7";
 // renovate: depName=registry.k8s.io/kube-apiserver
-local apiserverVersion = "v1.23.13";
+local apiserverVersion = "v1.24.7";
 
 local externalHostname = "kube.lan";
 local apiServer = "https://%s:6443" % [externalHostname];
@@ -671,12 +671,9 @@ local CA(name, namespace, issuer) = {
 
                   "etcd-healthcheck-timeout": "20s", // default 2s
                   "etcd-count-metric-poll-period": "10m", // default 1m
-                  "watch-cache": "false",  // disable to conserve precious ram
-                  //"default-watch-cache-size": "0", // default 100
                   "request-timeout": "5m",
                   "shutdown-delay-duration": "%ds" % (this.spec.template.spec.terminationGracePeriodSeconds - 5),
                   "max-requests-inflight": "150", // ~15 per 25-30 pods, default 400
-                  "target-ram-mb": "500", // ~60MB per 20-30 pods
 
                   "kubelet-client-certificate": "/keys/apiserver-kubelet-client/tls.crt",
                   "kubelet-client-key": "/keys/apiserver-kubelet-client/tls.key",
