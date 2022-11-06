@@ -4,6 +4,7 @@
     "github>anguslees/renovate-config",
     "schedule:weekly"
   ],
+  "recreateClosed": true,
   "packageRules": [
     {
       "matchPackagePatterns": [
