@@ -5,7 +5,7 @@ local kubecfg = import "kubecfg.libsonnet";
 local email = "guslees+letsencrypt@gmail.com";
 
 // renovate: depName=cert-manager registryUrl=https://charts.jetstack.io
-local chartData = importbin "https://charts.jetstack.io/charts/cert-manager-v1.7.3.tgz";
+local chartData = importbin "https://charts.jetstack.io/charts/cert-manager-v1.8.2.tgz";
 
 {
   namespace:: {metadata+: {namespace: "cert-manager"}},
