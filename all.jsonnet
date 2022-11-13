@@ -11,6 +11,7 @@
   nginx_ingress: import "nginx-ingress.jsonnet",
   cert_manager: import "cert-manager.jsonnet",
   external_dns: import "external-dns.jsonnet",
+  storage_version_migrator: import "storage-version-migrator.jsonnet",
 
   coreos_pxe_install: import "coreos-pxe-install.jsonnet",
   coreos_updater: import "coreos-updater.jsonnet",
