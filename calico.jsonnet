@@ -13,7 +13,7 @@ local clusterCidr = "10.244.0.0/16";
 local clusterCidr6 = "2406:3400:249:1703::/112";
 
 // renovate: depName=projectcalico/calico datasource=github-releases versioning=semver
-local manifest = importstr "https://raw.githubusercontent.com/projectcalico/calico/v3.24.1/manifests/calico.yaml";
+local manifest = importstr "https://raw.githubusercontent.com/projectcalico/calico/v3.24.5/manifests/calico.yaml";
 local upstream = kubecfg.fold(kubecfg.layouts.gvkName, kubecfg.parseYaml(manifest), {});
 
 local BGPConfiguration(name) =
