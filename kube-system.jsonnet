@@ -1352,7 +1352,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               default: kube.Container("metrics-server") {
-                image: "registry.k8s.io/metrics-server/metrics-server:v0.5.1", // renovate
+                image: "registry.k8s.io/metrics-server/metrics-server:v0.6.2", // renovate
                 command: ["/metrics-server"],
                 args_+: {
                   "logtostderr": "true",
