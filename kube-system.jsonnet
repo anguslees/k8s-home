@@ -113,6 +113,7 @@ local Certificate(name, issuer) = certman.Certificate(name) {
     renewBefore: "%dh" % self.renewBefore_h_,
     //privateKey+: {rotationPolicy: "Always"},  TODO: set this, after upgrading to newer cert-manager
     privateKey: {algorithm: "ECDSA"},
+    revisionHistoryLimit: 1,
   },
 
   // Fake Secret, used to represent the _real_ cert Secret to jsonnet

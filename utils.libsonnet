@@ -187,6 +187,7 @@ local kube = import "kube.libsonnet";
     host:: error "host is required",
 
     spec: {
+      revisionHistoryLimit: 1,
       secretName: this.metadata.name,
       issuerRef: {
         name: "letsencrypt-prod",

@@ -376,6 +376,7 @@ local issuerRef(issuer) = {
         renewBefore_h_:: self.duration_h_ / 3,
         renewBefore: "%dh" % self.renewBefore_h_,
         privateKey: {algorithm: "ECDSA"},
+        revisionHistoryLimit: 1,
       },
 
       // Fake Secret, used to represent the _real_ cert Secret to jsonnet

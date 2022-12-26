@@ -31,6 +31,7 @@ local host = "restic.oldmacdonald.farm";
       renewBefore_h_:: self.duration_h_ / 3,
       renewBefore: "%dh" % self.renewBefore_h_,
       privateKey: {algorithm: "ECDSA"},
+      revisionHistoryLimit: 1,
     },
   },
 
