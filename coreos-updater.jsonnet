@@ -7,107 +7,159 @@ local stripLeading(c, str) = if std.startsWith(str, c) then
 
 local isalpha(c) = std.codepoint(c) >= std.codepoint("a") && std.codepoint(c) <= std.codepoint("z");
 
-local arch = "amd64";
+local coreosNodeSelector = utils.archSelector("amd64");
 
 {
   namespace:: {
     metadata+: { namespace: "coreos-pxe-install" },
   },
 
-  serviceAccount: kube.ServiceAccount("update-agent") + $.namespace,
+  update_agent: {
+    sa: kube.ServiceAccount("update-agent") + $.namespace,
 
-  updater_role: kube.ClusterRole("update-agent") {
-    rules: [
-      {
-        apiGroups: [""],
-        resources: ["nodes"],
-        verbs: ["get", "watch", "list", "update"],
-      },
-      {
-        apiGroups: [""],
-        resources: ["configmaps"],
-        verbs: ["create", "get", "update", "list", "watch"],
-      },
-      {
-        apiGroups: [""],
-        resources: ["events"],
-        verbs: ["create", "watch"],
-      },
-      {
-        apiGroups: [""],
-        resources: ["pods"],
-        verbs: ["get", "list", "delete"],
-      },
-      {
-        apiGroups: ["extensions", "apps"],
-        resources: ["daemonsets"],
-        verbs: ["get"],
-      },
-    ],
-  },
+    clusterrole: kube.ClusterRole("flatcar-update-agent") {
+      rules: [
+        {
+          apiGroups: [""],
+          resources: ["nodes"],
+          verbs: ["get", "watch", "list", "update"],
+        },
+        {
+          apiGroups: [""],
+          resources: ["pods"],
+          verbs: ["get", "list", "delete"],
+        },
+        {
+          apiGroups: [""],
+          resources: ["pods/eviction"],
+          verbs: ["create"],
+        },
+        {
+          apiGroups: ["extensions", "apps"],
+          resources: ["daemonsets"],
+          verbs: ["get"],
+        },
+      ],
+    },
 
-  updater_binding: kube.ClusterRoleBinding("update-agent") {
-    subjects_: [$.serviceAccount],
-    roleRef_: $.updater_role,
-  },
+    clusterbinding: kube.ClusterRoleBinding("flatcar-update-agent") {
+      subjects_: [$.update_agent.sa],
+      roleRef_: $.update_agent.clusterrole,
+    },
 
-  flatcar_update_agent: kube.DaemonSet("flatcar-update-agent") + $.namespace {
-    spec+: {
-      template+: {
-        local hostPaths = ["/var/run/dbus", "/etc/flatcar", "/usr/share/flatcar", "/etc/os-release"],
-        local name(path) = stripLeading("-", std.join("", [if isalpha(c) then c else "-" for c in std.stringChars(path)])),
+    deploy: kube.DaemonSet("update-agent") + $.namespace {
+      spec+: {
+        template+: {
+          local hostPaths = ["/var/run/dbus", "/etc/flatcar", "/usr/share/flatcar", "/etc/os-release"],
+          local name(path) = stripLeading("-", std.join("", [if isalpha(c) then c else "-" for c in std.stringChars(path)])),
 
-        spec+: {
-          serviceAccountName: $.serviceAccount.metadata.name,
-          nodeSelector+: utils.archSelector(arch),
-          containers_+: {
-            update_agent: kube.Container("update-agent") {
-              image: "quay.io/kinvolk/flatcar-linux-update-operator:v0.7.3", // renovate
-              command: ["/bin/update-agent"],
-              volumeMounts+: [
-                {
-                  name: name(p),
-                  mountPath: p,
-                  readOnly: p != "/var/run/dbus",
-                }
-                for p in hostPaths
-              ],
-              env_+: {
-                // Read by update-agent as the node name to manage reboots for
-                UPDATE_AGENT_NODE: kube.FieldRef("spec.nodeName"),
-                POD_NAMESPACE: kube.FieldRef("metadata.namespace"),
+          spec+: {
+            serviceAccountName: $.update_agent.sa.metadata.name,
+            nodeSelector+: coreosNodeSelector,
+            containers_+: {
+              update_agent: kube.Container("update-agent") {
+                image: "ghcr.io/flatcar/flatcar-linux-update-operator:v0.9.0", // renovate
+                command: ["/bin/update-agent"],
+                volumeMounts+: [
+                  {
+                    name: name(p),
+                    mountPath: p,
+                    readOnly: p != "/var/run/dbus",
+                  }
+                  for p in hostPaths
+                ],
+                env_+: {
+                  // Read by update-agent as the node name to manage reboots for
+                  UPDATE_AGENT_NODE: kube.FieldRef("spec.nodeName"),
+                  POD_NAMESPACE: kube.FieldRef("metadata.namespace"),
+                },
+                securityContext: {runAsUser: 0},
               },
-              securityContext: {runAsUser: 0},
             },
+            tolerations+: utils.toleratesMaster,
+            volumes+: [kube.HostPathVolume(p) {name: name(p)}
+                       for p in hostPaths],
           },
-          tolerations+: utils.toleratesMaster,
-          volumes+: [kube.HostPathVolume(p) {name: name(p)}
-                     for p in hostPaths],
         },
       },
     },
   },
 
-  flatcar_update_operator: kube.Deployment("flatcar-update-operator") + $.namespace {
-    spec+: {
-      template+: {
-        spec+: {
-          serviceAccountName: $.serviceAccount.metadata.name,
-          nodeSelector+: utils.archSelector(arch),
-          containers_+: {
-            update_operator: kube.Container("update-operator") {
-              image: "quay.io/kinvolk/flatcar-linux-update-operator:v0.7.3", // renovate
-              command: ["/bin/update-operator"],
-              args_+: {
-                "before-reboot-annotations": "ceph-before-reboot-check",
-                "after-reboot-annotations": "ceph-after-reboot-check",
-              },
-              env_+: {
-                POD_NAMESPACE: kube.FieldRef("metadata.namespace"),
+  operator: {
+    sa: kube.ServiceAccount("update-operator") + $.namespace,
+
+    clusterrole: kube.ClusterRole("flatcar-update-operator") {
+      rules: [
+        {
+          apiGroups: [""],
+          resources: ["nodes"],
+          verbs: ["get", "watch", "list", "update"],
+        },
+      ],
+    },
+
+    clusterbinding: kube.ClusterRoleBinding("flatcar-update-operator") {
+      subjects_: [$.operator.sa],
+      roleRef_: $.operator.clusterrole,
+    },
+
+    role: kube.Role("update-operator") + $.namespace {
+      rules: [
+        {
+          apiGroups: [""],
+          resources: ["configmaps"],
+          verbs: ["create"],
+        },
+        {
+          apiGroups: [""],
+          resources: ["configmaps"],
+          resourceNames: ["flatcar-linux-update-operator-lock"],
+          verbs: ["get", "update"],
+        },
+        {
+          apiGroups: [""],
+          resources: ["events"],
+          verbs: ["create", "watch"],
+        },
+        {
+          apiGroups: ["coordination.k8s.io"],
+          resources: ["leases"],
+          verbs: ["create"],
+        },
+        {
+          apiGroups: ["coordination.k8s.io"],
+          resources: ["leases"],
+          resourceNames: ["flatcar-linux-update-operator-lock"],
+          verbs: ["get", "update"],
+        },
+      ],
+    },
+
+    binding: kube.RoleBinding("update-operator") + $.namespace {
+      subjects_: [$.operator.sa],
+      roleRef_: $.operator.role,
+    },
+
+    deploy: kube.Deployment("update-operator") + $.namespace {
+      spec+: {
+        template+: {
+          spec+: {
+            serviceAccountName: $.operator.sa.metadata.name,
+            containers_+: {
+              update_operator: kube.Container("update-operator") {
+                image: "ghcr.io/flatcar/flatcar-linux-update-operator:v0.9.0", // renovate
+                command: ["/bin/update-operator"],
+                args_+: {
+                  "before-reboot-annotations": "ceph-before-reboot-check",
+                  "after-reboot-annotations": "ceph-after-reboot-check",
+                },
+                env_+: {
+                  POD_NAMESPACE: kube.FieldRef("metadata.namespace"),
+                },
               },
             },
+            tolerations+: utils.toleratesMaster,
           },
-          tolerations+: utils.toleratesMaster,
         },
       },
     },
