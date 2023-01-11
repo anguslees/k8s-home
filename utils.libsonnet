@@ -201,6 +201,7 @@ local kube = import "kube.libsonnet";
           domains: this.spec.dnsNames,
         }],
       },
+      privateKey: {algorithm: "ECDSA"},
     },
   },
 
