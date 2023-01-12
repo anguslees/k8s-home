@@ -16,9 +16,9 @@ local certman = import "cert-manager.jsonnet";
 // 3. kubelets (see coreos-pxe-install.jsonnet:coreos_kubelet_tag)
 
 // renovate: depName=registry.k8s.io/kube-proxy
-local version = "v1.24.9";
+local version = "v1.25.3";
 // renovate: depName=registry.k8s.io/kube-apiserver
-local apiserverVersion = "v1.24.9";
+local apiserverVersion = "v1.25.3";
 
 local externalHostname = "kube.lan";
 local apiServer = "https://%s:6443" % [externalHostname];
@@ -324,7 +324,7 @@ local CA(name, namespace, issuer) = {
                   GOMEMLIMIT: kube.ResourceFieldRef("requests.memory"),
                 },
                 livenessProbe: {
-                  httpGet: {path: "/health?serializable=true", port: 2381, scheme: "HTTP"},
+                  httpGet: {path: "/health?serializable=true&exclude=NOSPACE", port: 2381, scheme: "HTTP"},
                   // v1.23 + GRPCContainerProbe feature gate
                   //grpc: {port: 2379}
                   failureThreshold: 5,
@@ -332,11 +332,12 @@ local CA(name, namespace, issuer) = {
                   periodSeconds: 30,
                 },
                 readinessProbe: self.livenessProbe {
-                  httpGet: {path: "/health", port: 2381, scheme: "HTTP"},
+                  httpGet+: {path: "/health?serializable=false"},
                   tcpSocket: null,
                   failureThreshold: 3,
                 },
                 startupProbe: self.livenessProbe {
+                  httpGet+: {path: "/health?serializable=false"},
                   local timeoutSeconds = 30 * 60,
                   failureThreshold: std.ceil(timeoutSeconds / self.periodSeconds),
                 },
@@ -518,7 +519,6 @@ local CA(name, namespace, issuer) = {
                   "metrics-bind-address": "$(POD_IP):10249",
                   "healthz-bind-address": "$(POD_IP):10256",
                   feature_gates_:: {
-                    IPv6DualStack: true,
                   },
                   "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
                 },
@@ -640,7 +640,6 @@ local CA(name, namespace, issuer) = {
                 command: ["kube-apiserver"],
                 args_+: {
                   feature_gates_:: {
-                    IPv6DualStack: true,
                     DisableCloudProviders: true,
                   },
                   "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
@@ -701,6 +700,9 @@ local CA(name, namespace, issuer) = {
                     // Workaround old coreos update-operator code.
                     // https://github.com/coreos/container-linux-update-operator/issues/196
                     "extensions/v1beta1/daemonsets": true,
+                    // Old rook-ceph version
+                    "batch/v1beta1": true,
+                    "policy/v1beta1": true,
                   },
                   "runtime-config": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.runtime_config_)]),
                 },
@@ -858,7 +860,6 @@ local CA(name, namespace, issuer) = {
                   "leader-elect-resource-lock": "leases",
 
                   feature_gates_:: {
-                    IPv6DualStack: true,
                     DisableCloudProviders: true,
                   },
                   "feature-gates": std.join(",", ["%s=%s" % kv for kv in kube.objectItems(self.feature_gates_)]),
@@ -1536,7 +1537,6 @@ local CA(name, namespace, issuer) = {
           evictionPressureTransitionPeriod: "5m",
 
           featureGates: {
-            IPv6DualStack: true,
             NodeSwap: true,
             DisableCloudProviders: true,
           },
