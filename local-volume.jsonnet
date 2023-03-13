@@ -75,7 +75,7 @@ local kubecfg = import "kubecfg.libsonnet";
             containers_+: {
               default: kube.Container("provisioner") {
                 local c = self,
-                //image: "registry.k8s.io/sig-storage/local-volume-provisioner:v2.4.0", // renovate
+                //image: "registry.k8s.io/sig-storage/local-volume-provisioner:v2.5.0", // renovate
                 image: "gcr.io/k8s-staging-sig-storage/local-volume-provisioner@sha256:fed54722dc95a568756f46db8d4603c053cfaa3467b89c1c0c1f13ef6fdf4c58", // Workaround broken arm64 image in :v2.4.0
                 securityContext: {privileged: true},
                 volumeMounts_+: {
