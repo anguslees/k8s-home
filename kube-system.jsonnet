@@ -273,7 +273,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               etcd: kube.Container("etcd") {
-                image: "gcr.io/etcd-development/etcd:v3.5.7", // renovate
+                image: "gcr.io/etcd-development/etcd:v3.5.9", // renovate
                 securityContext+: {
                   allowPrivilegeEscalation: false,
                 },
@@ -1354,7 +1354,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               default: kube.Container("metrics-server") {
-                image: "registry.k8s.io/metrics-server/metrics-server:v0.6.2", // renovate
+                image: "registry.k8s.io/metrics-server/metrics-server:v0.6.3", // renovate
                 command: ["/metrics-server"],
                 args_+: {
                   "logtostderr": "true",

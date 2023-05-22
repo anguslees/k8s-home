@@ -48,7 +48,7 @@ local arch = "amd64";
           tolerations+: utils.toleratesMaster,
           containers_+: {
             approver: kube.Container("kubelet-csr-approver") {
-              image: "postfinance/kubelet-csr-approver:v0.2.4", // renovate
+              image: "postfinance/kubelet-csr-approver:v0.2.8", // renovate
               args_: {
                 "metrics-bind-address": ":8080",
                 "health-probe-bind-address": ":8081",
