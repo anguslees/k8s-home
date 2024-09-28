@@ -40,7 +40,7 @@ local rookCephSystem = import "rook-ceph-system.jsonnet";
       // but RAW mode from ceph-volume. See ceph: add raw mode for non-pvc
       // osd #4879 for more details.
       cephVersion: {
-        image: "ceph/ceph:v15.2.13", // renovate
+        image: "ceph/ceph:v16.2.5", // renovate
       },
       // NB: Delete contents of this dir if recreating Cluster
       dataDirHostPath: "/var/lib/rook",
