@@ -273,7 +273,7 @@ local CA(name, namespace, issuer) = {
             },
             containers_+: {
               etcd: kube.Container("etcd") {
-                image: "gcr.io/etcd-development/etcd:v3.5.19", // renovate
+                image: "gcr.io/etcd-development/etcd:v3.5.20", // renovate
                 securityContext+: {
                   allowPrivilegeEscalation: false,
                 },
