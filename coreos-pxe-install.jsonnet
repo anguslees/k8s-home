@@ -7,7 +7,7 @@ local utils = import "utils.libsonnet";
 //   kubectl label nodes -l flatcar-linux-update.v1.flatcar-linux.net/id flatcar-linux-update.v1.flatcar-linux.net/reboot-needed=true
 
 // renovate: depName=kubernetes/kubernetes datasource=github-releases versioning=semver
-local kubelet_tag = "v1.24.17";
+local kubelet_tag = "v1.34.2";
 
 local default_env = {
   // NB: dockerd can't route to a cluster LB VIP? (fixme)
