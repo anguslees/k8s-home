@@ -6,7 +6,7 @@ local utils = import "utils.libsonnet";
 // -> https://github.com/rook/rook/pull/5660
 
 // renovate: depName=rook-ceph registryUrl=https://charts.rook.io/release
-local chartData = importbin "https://charts.rook.io/release/rook-ceph-v1.6.11.tgz";
+local chartData = importbin "https://charts.rook.io/release/rook-ceph-v1.18.8.tgz";
 
 {
   namespace:: {metadata+: {namespace: "rook-ceph"}},
